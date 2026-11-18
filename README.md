@@ -15,6 +15,7 @@ src/
   lib/            firebase.ts (init + emulator wiring), firestore.ts (zod converters + realtime hooks), functions.ts
   components/ui/  shadcn/ui components
   sw.ts           service worker: Workbox precache + FCM background messages
+storage.rules     photo uploads (avatars, trip covers)
 functions/        Cloud Functions (bundled with esbuild; imports src/shared via @shared/*)
 firestore.rules   security rules · firestore.indexes.json
 tests/rules/      security rules tests · e2e/  Playwright
@@ -36,16 +37,24 @@ npm run dev                     # http://localhost:5173 (in another terminal)
 
 Or `npm run dev:all` for both in one terminal. With `VITE_USE_EMULATORS=true`, the app talks to the emulators under the project id `demo-happs`, so nothing real is touched. Emulator data is saved to `./emulator-data` on exit.
 
+**Real Google sign-in, local data.** The Auth emulator shows a fake account picker. To sign in with your real Google account while trips stay in the local emulators:
+
+```bash
+# .env.local: VITE_USE_EMULATORS=true, VITE_AUTH_EMULATOR=false
+npm run emulators:real-auth     # Firestore, Functions, Storage under the real project id
+npm run dev
+```
+
+This uses real Firebase Auth for the `happss` project, so accounts are real; the data lives in `./emulator-data-real`. Popup sign-in works in Chrome and Safari as is. Browsers that block popups (installed PWAs, some webviews, the Claude browser pane) fall back to a redirect, which needs same-origin auth: add `http://localhost:5173/__/auth/handler` to the OAuth client's **Authorized redirect URIs** (Google Cloud console → APIs & Services → Credentials → "Web client (auto created by Google Service)"), then set `VITE_AUTH_SAME_ORIGIN=true`.
+
 Rebuild functions after editing them: `npm --prefix functions run build:watch` keeps the emulator up to date.
 
 ### Tests
 
 ```bash
 npm test                 # unit tests (money, splits, FX, balances, state machine, dates, map)
-npm run test:rules       # security rules tests (starts its own Firestore emulator)
-npm run test:rules:dev   # same, against emulators you already have running
-npm run test:e2e         # Playwright against dev server + running emulators
-npm run test:e2e:ci      # Playwright with emulators started for you
+npm run test:rules       # Firestore + Storage rules tests (own emulators on other ports)
+npm run test:e2e         # Playwright: own emulators (Auth emulator forced on) + own dev server on :5174
 npm run build && npx vite preview --port 4173 &
 E2E_BASE_URL=http://127.0.0.1:4173 npx playwright test e2e/pwa.spec.ts   # installability + offline shell
 npm run typecheck && npm run lint
@@ -58,12 +67,13 @@ The client config for project `happss` goes in `.env.local` (see `.env.example`)
 1. **Firebase project + web app.** Copy the web config values into `.env.local` (`VITE_FIREBASE_*`). For production builds set `VITE_USE_EMULATORS=false` (or leave it, since it's ignored outside `npm run dev`).
 2. **Auth providers.** Enable **Google** and **Email/Password** in Authentication → Sign-in method. Under Settings → Authorized domains, add your Hosting domains (`happss.web.app`, `happss.firebaseapp.com`) and any preview channel domains.
    - Same-origin redirect sign-in: production builds use the current host as `authDomain` when served from `*.web.app` / `*.firebaseapp.com` (or set `VITE_AUTH_SAME_ORIGIN=true` for a custom domain on Firebase Hosting). Add `https://<your-domain>/__/auth/handler` to the Google OAuth client's **Authorized redirect URIs** in Google Cloud Console → APIs & Services → Credentials.
-3. **Firestore.** Create the database in production mode. Pick a region close to your users, e.g. `australia-southeast1`. Functions default to `australia-southeast1`; change `REGION` in `functions/src/admin.ts` and `VITE_FUNCTIONS_REGION` together if needed.
-4. **Blaze plan + budget alert.** Cloud Functions need the Blaze (pay-as-you-go) plan. A small test group fits within the free quotas, but set a budget alert (e.g. $5) in Google Cloud Billing first. Then deploy rules, indexes and functions: `firebase deploy --only firestore,functions`.
-5. **Google Maps Platform.** In Google Cloud console, enable **Maps JavaScript API** and **Places API (New)**. Create a **Map ID** (Map Management, JavaScript, Vector) and an **API key restricted by HTTP referrer** to your domains (plus `localhost:5173` for dev). Set `VITE_GOOGLE_MAPS_API_KEY` and `VITE_GOOGLE_MAPS_MAP_ID`. Without a key the app still works: locations are typed in by hand and the Map tab shows a list.
-6. **Web push.** In Project settings → Cloud Messaging → Web Push certificates, generate a key pair and set `VITE_FCM_VAPID_KEY`. Push needs a production build (the service worker is off in `npm run dev`). On iPhone, push only works after the app is added to the Home Screen.
-7. **Install and run locally:** `npm i`, `npm run emulators`, `npm run dev` (see above).
-8. **Deploy.** `npm run build && firebase deploy` (hosting + rules + indexes + functions). Beta builds: `npm run build && firebase hosting:channel:deploy beta`.
+3. **Storage.** Create the default bucket (Storage → Get started, same region). It holds profile photos and trip covers, which are resized to JPEG in the browser before upload. Deploy its rules with `firebase deploy --only storage`.
+4. **Firestore.** Create the database in production mode. Pick a region close to your users, e.g. `australia-southeast1`. Functions default to `australia-southeast1`; change `REGION` in `functions/src/admin.ts` and `VITE_FUNCTIONS_REGION` together if needed.
+5. **Blaze plan + budget alert.** Cloud Functions need the Blaze (pay-as-you-go) plan. A small test group fits within the free quotas, but set a budget alert (e.g. $5) in Google Cloud Billing first. Then deploy rules, indexes and functions: `firebase deploy --only firestore,storage,functions`.
+6. **Google Maps Platform.** In Google Cloud console, enable **Maps JavaScript API** and **Places API (New)**. Create a **Map ID** (Map Management, JavaScript, Vector) and an **API key restricted by HTTP referrer** to your domains (plus `localhost:5173` for dev). Set `VITE_GOOGLE_MAPS_API_KEY` and `VITE_GOOGLE_MAPS_MAP_ID`. Without a key the app still works: locations are typed in by hand and the Map tab shows a list.
+7. **Web push.** In Project settings → Cloud Messaging → Web Push certificates, generate a key pair and set `VITE_FCM_VAPID_KEY`. Push needs a production build (the service worker is off in `npm run dev`). On iPhone, push only works after the app is added to the Home Screen.
+8. **Install and run locally:** `npm i`, `npm run emulators`, `npm run dev` (see above).
+9. **Deploy.** `npm run build && firebase deploy` (hosting + rules + indexes + functions). Beta builds: `npm run build && firebase hosting:channel:deploy beta`.
 
 Never commit service account keys. The Admin SDK key isn't needed for any of the above: deployed functions use their default service account, and local dev uses the emulators.
 

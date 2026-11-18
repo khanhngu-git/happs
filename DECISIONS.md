@@ -57,3 +57,19 @@ The `liquid-glass` skill (github.com/heyparsadev/liquid-glass-skill) targets Swi
 - **Emulator:** the Auth emulator is reached via `localhost` (same site as the dev server) rather than `127.0.0.1`.
 - **Real project in dev:** set `VITE_AUTH_SAME_ORIGIN=true`. Vite then proxies `/__/auth` to the project's auth domain, the same way Firebase Hosting does in production. Add `http://localhost:5173/__/auth/handler` to the OAuth client's redirect URIs. `localhost` is an authorized domain on the project; `127.0.0.1` is not.
 - A redirect that comes back empty now shows "Google sign-in didn't finish" instead of failing silently. Disabled providers and unauthorized domains get specific messages.
+
+## Photos
+- **Firebase Storage was added** (it wasn't in the original stack) for profile photos and trip covers. The browser decodes the photo (respecting EXIF rotation), crops avatars to a 512px square, fits covers within 1600px, and re-encodes as JPEG before uploading. Each upload gets a new filename so caches never show a stale picture, and the previous file is deleted.
+- `storage.rules`: you write only your own `users/{uid}/…`. Only the trip owner writes `trips/{tripId}/…`, checked with a cross-service `firestore.get` on the trip. Images only, under 5 MB. `<img>` tags use tokenised download URLs, so invite previews can show a cover to people who aren't members yet.
+- A new trip's cover uploads right after the trip is created, because the rule needs the trip to exist. Deleting a trip or an account removes its photos (Cloud Functions).
+- The photo URL field is gone. "Use Google photo" stays as a shortcut for Google accounts.
+
+## Map, take two
+- **Only timed stops are numbered**, strictly by start time, because that's the order you actually visit them. "Anytime" plans and stays show as plain icons and aren't joined by the line. (Before, Anytime plans were numbered first, so a 9:15 am airport run showed as stop 3.)
+- The route is a thin solid line with a white casing, and the numbers carry the order, so there are no arrows. A swipeable strip lists the day's stops with names. Tapping a stop zooms to street level so nearby pins separate.
+
+## Headers
+- Every screen uses the same 48px header row with 44px icons pinned right, so the bell and other icons sit in exactly the same spot when moving between Trips and a trip. On Trips, the large "Trips" title is the title in that row.
+
+## Test isolation
+- `npm run test:rules` and `npm run test:e2e` start their own emulators on separate ports (`firebase.rules-test.json`, `firebase.e2e.json`). E2E runs its own dev server on :5174 with the Auth emulator forced on. Tests can't create real accounts, even when your dev setup uses real Google sign-in, and they don't disturb your dev emulators.
