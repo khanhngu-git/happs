@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { updateProfile } from 'firebase/auth'
 import { doc, updateDoc, writeBatch } from 'firebase/firestore'
-import { KeyRound, LogOut, MessageSquare, Trash2 } from 'lucide-react'
+import { KeyRound, Loader2, LogOut, MessageSquare, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageHeader, LargeTitle } from '@/components/PageHeader'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -20,6 +20,8 @@ import { api, callableMessage } from '@/lib/functions'
 import { COMMON_CURRENCIES } from '@/shared/money'
 import { DEFAULT_NOTIFICATION_PREFS, type NotificationType } from '@/shared/schemas'
 import { FeedbackDialog } from './FeedbackDialog'
+import { PhotoPicker } from '@/components/PhotoPicker'
+import { removeByUrl, uploadAvatar } from '@/lib/uploads'
 import { FullScreenLoader } from '@/components/FullScreenLoader'
 
 const PREF_LABELS: Record<NotificationType, { title: string; hint: string }> = {
@@ -51,7 +53,6 @@ function ProfileForm() {
   const { profile } = useAuth()
   const { data: trips } = useMyTrips(user.uid)
   const [name, setName] = useState(profile?.displayName ?? '')
-  const [photo, setPhoto] = useState(profile?.photoURL ?? '')
   const [push, setPush] = useState<PushState>('off')
   const [password, setPassword] = useState('')
   const [feedback, setFeedback] = useState(false)
@@ -64,21 +65,36 @@ function ProfileForm() {
     pushState().then(setPush, () => setPush('unsupported'))
   }, [])
 
-  async function saveProfile() {
+  /** Name and photo live on the profile and, denormalised, in each trip's member doc. */
+  async function writeIdentity(patch: { displayName?: string; photoURL?: string | null }) {
+    const b = writeBatch(db)
+    b.update(doc(db, 'users', user.uid), patch)
+    trips.forEach((t) => b.update(doc(db, 'trips', t.id, 'members', user.uid), patch))
+    await b.commit()
+    await updateProfile(user, patch)
+  }
+
+  async function saveName() {
     const displayName = name.trim()
     if (!displayName) return toast.error('Your name can’t be empty')
-    const photoURL = photo.trim() || null
     try {
-      // Profile + the denormalised copy in every trip's members subcollection.
-      const b = writeBatch(db)
-      b.update(doc(db, 'users', user.uid), { displayName, photoURL })
-      trips.forEach((t) => b.update(doc(db, 'trips', t.id, 'members', user.uid), { displayName, photoURL }))
-      await b.commit()
-      await updateProfile(user, { displayName, photoURL })
-      toast.success('Profile saved')
+      await writeIdentity({ displayName })
+      toast.success('Name saved')
     } catch (err) {
       console.error(err)
-      toast.error('Couldn’t save your profile')
+      toast.error('Couldn’t save your name')
+    }
+  }
+
+  async function setPhoto(file: File | null) {
+    const previous = profile?.photoURL
+    if (file) {
+      const url = await uploadAvatar(user.uid, file, previous)
+      await writeIdentity({ photoURL: url })
+      toast.success('Photo updated')
+    } else {
+      await writeIdentity({ photoURL: null })
+      if (previous) await removeByUrl(previous)
     }
   }
 
@@ -93,22 +109,40 @@ function ProfileForm() {
 
         <Group title="You">
           <div className="space-y-4 p-4">
-            <div className="flex items-center gap-4">
-              <UserAvatar name={name} photoURL={photo || null} className="size-16 text-lg" />
-              <div className="text-sm text-muted-foreground">{user.email}</div>
-            </div>
+            <PhotoPicker label="Choose a profile photo" onPick={(f) => setPhoto(f)}>
+              {(busy, open) => (
+                <div className="flex items-center gap-4">
+                  <button type="button" onClick={open} disabled={busy} className="relative rounded-full active:opacity-70" aria-label="Change profile photo">
+                    <UserAvatar name={name} photoURL={profile?.photoURL ?? null} className="size-20 text-xl" />
+                    {busy && <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40"><Loader2 className="size-6 animate-spin text-white" /></span>}
+                  </button>
+                  <div className="flex flex-col items-start gap-1">
+                    <button type="button" onClick={open} disabled={busy} className="min-h-9 text-[1.0625rem] font-medium text-primary">
+                      {busy ? 'Uploading…' : profile?.photoURL ? 'Change photo' : 'Add photo'}
+                    </button>
+                    {profile?.photoURL && !busy && (
+                      <button type="button" onClick={() => setPhoto(null).catch(() => toast.error('Couldn’t remove the photo'))} className="min-h-9 text-[0.9375rem] text-destructive">
+                        Remove photo
+                      </button>
+                    )}
+                    {googlePhoto && profile?.photoURL !== googlePhoto && !busy && (
+                      <button type="button" onClick={() => writeIdentity({ photoURL: googlePhoto })} className="min-h-9 text-[0.9375rem] text-primary">
+                        Use Google photo
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </PhotoPicker>
+            <p className="text-sm text-muted-foreground">{user.email}</p>
             <div className="space-y-2">
               <Label htmlFor="p-name">Display name</Label>
-              <Input id="p-name" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="p-photo">Photo URL</Label>
-              <Input id="p-photo" type="url" value={photo} placeholder="https://…" onChange={(e) => setPhoto(e.target.value)} />
-              {googlePhoto && photo !== googlePhoto && (
-                <Button type="button" variant="link" className="h-auto p-0" onClick={() => setPhoto(googlePhoto)}>
-                  Use my Google photo
+              <div className="flex gap-2">
+                <Input id="p-name" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
+                <Button variant="secondary" onClick={saveName} disabled={name.trim() === (profile?.displayName ?? '')}>
+                  Save
                 </Button>
-              )}
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="p-cur">Default currency for new trips</Label>
@@ -122,9 +156,6 @@ function ProfileForm() {
                 ))}
               </NativeSelect>
             </div>
-            <Button onClick={saveProfile} className="w-full">
-              Save profile
-            </Button>
           </div>
         </Group>
 
