@@ -13,7 +13,7 @@ export function VerifyEmailBanner() {
   if (!user || user.emailVerified || !isPasswordUser || dismissed) return null
 
   return (
-    <div className="mx-4 mt-3 flex items-start gap-3 rounded-2xl bg-warning/15 p-3 text-sm sm:mx-auto sm:max-w-2xl" role="status">
+    <div className="flex items-start gap-3 rounded-[1.25rem] bg-warning/15 p-4 text-sm" role="status">
       <MailWarning className="mt-0.5 size-5 shrink-0" aria-hidden />
       <div className="flex-1">
         <p className="font-medium">Verify your email</p>
