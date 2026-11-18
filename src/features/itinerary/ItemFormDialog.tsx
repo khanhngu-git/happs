@@ -63,6 +63,7 @@ export function ItemFormDialog({
     linkedExpense ? draftFromCost(linkedExpense) : emptyDraft({ currency: trip.baseCurrency, paidBy: me, memberIds: members.map((m) => m.id) }),
   )
   const [costError, setCostError] = useState<string | null>(null)
+  const [more, setMore] = useState(!!(item?.notes || item?.bookingUrl || item?.bookingRef || linkedExpense))
 
   const form = useForm<Values>({ resolver: zodResolver(schema) })
   const { errors, isSubmitting } = form.formState
@@ -122,7 +123,7 @@ export function ItemFormDialog({
           bookingRef: v.bookingRef,
         },
       })
-      toast.success(item ? 'Saved' : 'Added to the plan')
+      toast.success(item ? 'Saved' : 'Added')
       onOpenChange(false)
     } catch (err) {
       if (err instanceof SharesLockedError) toast.warning(err.message, { duration: 8000 })
@@ -137,7 +138,7 @@ export function ItemFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{item ? 'Edit plan' : 'Add to the plan'}</DialogTitle>
+          <DialogTitle>{item ? 'Edit activity' : 'New activity'}</DialogTitle>
           <DialogDescription className="sr-only">Details, time, place and cost</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-5" noValidate>
@@ -213,6 +214,8 @@ export function ItemFormDialog({
 
           <PlacePicker id="item-place" value={location} onChange={setLocation} />
 
+          {more ? (
+            <>
           <div className="space-y-2">
             <Label htmlFor="item-notes">Notes</Label>
             <Textarea id="item-notes" rows={3} {...form.register('notes')} />
@@ -229,11 +232,11 @@ export function ItemFormDialog({
             </div>
           </div>
 
-          <div className="space-y-4 rounded-[1.25rem] bg-foreground/[0.04] p-4">
+          <div className="space-y-4 rounded-2xl bg-foreground/[0.04] p-4">
             <label className="flex min-h-11 items-center justify-between gap-3">
               <span>
-                <span className="block font-medium">Cost</span>
-                <span className="block text-sm text-muted-foreground">Adds a shared expense automatically</span>
+                <span className="block font-medium">Split a cost</span>
+                <span className="block text-sm text-muted-foreground">Shows up in Expenses for everyone</span>
               </span>
               <Switch checked={hasCost} onCheckedChange={setHasCost} aria-label="This has a cost" />
             </label>
@@ -241,8 +244,15 @@ export function ItemFormDialog({
             {costError && <p className="text-sm text-destructive" role="alert">{costError}</p>}
           </div>
 
+            </>
+          ) : (
+            <button type="button" onClick={() => setMore(true)} className="min-h-11 text-[0.9375rem] font-medium text-primary">
+              More details: notes, booking, cost
+            </button>
+          )}
+
           <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? 'Saving…' : item ? 'Save changes' : 'Add to plan'}
+            {isSubmitting ? 'Saving…' : item ? 'Save' : 'Add'}
           </Button>
         </form>
       </DialogContent>

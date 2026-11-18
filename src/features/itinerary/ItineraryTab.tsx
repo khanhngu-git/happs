@@ -1,45 +1,40 @@
-import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { useRef, useState } from 'react'
+import { Link } from 'react-router'
 import { DndContext, KeyboardSensor, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { CalendarPlus, GripVertical } from 'lucide-react'
+import { CalendarPlus, ChevronLeft, ChevronRight, GripVertical, List } from 'lucide-react'
 import { toast } from 'sonner'
-import { EmptyState } from '@/components/EmptyState'
 import { Fab } from '@/components/Fab'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useTrip } from '@/features/trips/TripContext'
-import { useExpenses } from '@/features/expenses/expenseApi'
-import type { Expense, Item } from '@/lib/firestore'
-import { formatMoney } from '@/shared/money'
-import { formatLongDate, todayInZone, tripDays } from '@/shared/dates'
+import type { Item } from '@/lib/firestore'
+import { formatLongDate } from '@/shared/dates'
 import { itemsForDay, staysForDay } from '@/shared/itinerary'
+import { ActivityRow } from './ActivityRow'
 import { DayPicker } from './DayPicker'
-import { ItemCard } from './ItemCard'
-import { ItemFormDialog } from './ItemFormDialog'
-import { ItemSheet } from './ItemSheet'
 import { StayBanner } from './StayBanner'
+import { useItineraryDialogs } from './ItineraryDialogs'
 import { reorderItems, useItems } from './itineraryApi'
+import { useTripDay } from './useTripDay'
 
-function SortableItem({ item, expense, onOpen }: { item: Item; expense?: Expense; onOpen(): void }) {
+function SortableRow({ item, onOpen }: { item: Item; onOpen(): void }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
   return (
-    <ItemCard
+    <ActivityRow
       ref={setNodeRef}
       item={item}
-      expense={expense}
       onOpen={onOpen}
-      className={isDragging ? 'z-10 shadow-lg' : undefined}
+      className={isDragging ? 'relative z-10 shadow-lg' : undefined}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      handle={
+      trailing={
         <button
           type="button"
           ref={setActivatorNodeRef}
           {...attributes}
           {...listeners}
-          className="flex w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-r-[1.25rem] text-muted-foreground active:cursor-grabbing"
+          className="flex h-14 w-12 shrink-0 cursor-grab touch-none items-center justify-center text-muted-foreground active:cursor-grabbing"
           aria-label={`Reorder ${item.title}`}
         >
           <GripVertical className="size-5" />
@@ -49,34 +44,44 @@ function SortableItem({ item, expense, onOpen }: { item: Item; expense?: Expense
   )
 }
 
-function DaySection({
-  date,
-  index,
-  items,
-  expensesById,
-  sortable,
-  onOpen,
-  onAdd,
-}: {
-  date: string
-  index: number
-  items: Item[]
-  expensesById: Map<string, Expense>
-  sortable: boolean
-  onOpen(i: Item): void
-  onAdd(date: string): void
-}) {
+/** Swipe left/right to move between days (ignores mostly-vertical drags). */
+function useSwipe(onLeft: () => void, onRight: () => void) {
+  const start = useRef<{ x: number; y: number } | null>(null)
+  return {
+    onTouchStart: (e: React.TouchEvent) => {
+      const t = e.touches[0]!
+      start.current = { x: t.clientX, y: t.clientY }
+    },
+    onTouchEnd: (e: React.TouchEvent) => {
+      if (!start.current) return
+      const t = e.changedTouches[0]!
+      const dx = t.clientX - start.current.x
+      const dy = t.clientY - start.current.y
+      start.current = null
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) (dx < 0 ? onLeft : onRight)()
+    },
+  }
+}
+
+export function ItineraryTab() {
   const { trip } = useTrip()
-  const day = itemsForDay(items, date)
-  const stays = staysForDay(items, date)
-  const anytime = day.filter((i) => !i.startTime && i.type !== 'stay')
-  const timed = day.filter((i) => i.startTime || i.type === 'stay')
-  const subtotal = day.reduce((s, i) => s + (i.linkedExpenseId ? (expensesById.get(i.linkedExpenseId)?.amountBaseMinor ?? 0) : 0), 0)
+  const { data: items, loading } = useItems(trip.id)
+  const { days, day, index, today, setDay, step } = useTripDay(trip)
+  const { dialogs, openItem, addItem } = useItineraryDialogs(items)
+  const [reordering, setReordering] = useState(false)
+  const swipe = useSwipe(() => step(1), () => step(-1))
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
+
+  const dayItems = itemsForDay(items, day)
+  const stays = staysForDay(items, day)
+  const stayIds = new Set(stays.map((s) => s.stay.id))
+  const activities = dayItems.filter((i) => !stayIds.has(i.id))
+  const anytime = activities.filter((i) => !i.startTime)
+  const timed = activities.filter((i) => i.startTime)
 
   function onDragEnd(e: DragEndEvent) {
     if (!e.over || e.active.id === e.over.id) return
@@ -86,146 +91,91 @@ function DaySection({
   }
 
   return (
-    <section aria-labelledby={`day-${date}`} className="space-y-3">
-      <h2 id={`day-${date}`} className="px-1 text-xl font-bold tracking-tight">
-        Day {index + 1} <span className="font-semibold text-muted-foreground">· {formatLongDate(date)}</span>
-      </h2>
-      {stays.map((s) => (
-        <StayBanner key={s.stay.id} info={s} onOpen={() => onOpen(s.stay)} />
-      ))}
-      {day.length === 0 ? (
-        <EmptyState
-          icon={<CalendarPlus />}
-          title={`No plans for Day ${index + 1} yet`}
-          description="Add your first activity, a meal, or how you’re getting around."
-          action={<Button onClick={() => onAdd(date)}>Add a plan</Button>}
-        />
-      ) : (
-        <>
-          {anytime.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="px-1 text-[0.8125rem] font-semibold tracking-wide text-muted-foreground uppercase">Anytime</h3>
-              {sortable ? (
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-                  <SortableContext items={anytime.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-2">
-                      {anytime.map((i) => (
-                        <SortableItem key={i.id} item={i} expense={i.linkedExpenseId ? expensesById.get(i.linkedExpenseId) : undefined} onOpen={() => onOpen(i)} />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              ) : (
-                anytime.map((i) => <ItemCard key={i.id} item={i} expense={i.linkedExpenseId ? expensesById.get(i.linkedExpenseId) : undefined} onOpen={() => onOpen(i)} />)
-              )}
-            </div>
-          )}
-          {timed.length > 0 && (
-            <ol className="relative space-y-2 border-l-2 border-border pl-4 ml-3">
-              {timed.map((i) => (
-                <li key={i.id} className="relative">
-                  <span className="absolute top-6 -left-[1.4rem] size-3 rounded-full bg-primary ring-4 ring-grouped" aria-hidden />
-                  <ItemCard item={i} expense={i.linkedExpenseId ? expensesById.get(i.linkedExpenseId) : undefined} onOpen={() => onOpen(i)} />
-                </li>
-              ))}
-            </ol>
-          )}
-        </>
-      )}
-      {subtotal > 0 && (
-        <p className="flex justify-between px-1 text-[0.9375rem]">
-          <span className="text-muted-foreground">Day {index + 1} costs</span>
-          <span className="font-semibold tabular-nums">{formatMoney(subtotal, trip.baseCurrency)}</span>
-        </p>
-      )}
-    </section>
-  )
-}
+    <main className="mx-auto max-w-2xl pt-2">
+      <DayPicker days={days} selected={day} today={today} onSelect={setDay} />
 
-export function ItineraryTab() {
-  const { trip } = useTrip()
-  const [params, setParams] = useSearchParams()
-  const { data: items, loading } = useItems(trip.id)
-  const { data: expenses } = useExpenses(trip.id)
-  const days = useMemo(() => tripDays(trip.startDate, trip.endDate), [trip.startDate, trip.endDate])
-  const today = todayInZone(trip.timeZone)
-  const defaultDay = days.includes(today) ? today : days[0]!
-  const selected = days.includes(params.get('day') ?? '') ? params.get('day')! : defaultDay
-  const view = params.get('view') === 'all' ? 'all' : 'day'
-
-  const [formOpen, setFormOpen] = useState(false)
-  const [formDate, setFormDate] = useState(selected)
-  const [editing, setEditing] = useState<Item | null>(null)
-  const openItemId = params.get('item')
-  const openItem = items.find((i) => i.id === openItemId) ?? null
-
-  const expensesById = useMemo(() => new Map(expenses.map((e) => [e.id, e])), [expenses])
-  const tripTotal = items.reduce((s, i) => s + (i.linkedExpenseId ? (expensesById.get(i.linkedExpenseId)?.amountBaseMinor ?? 0) : 0), 0)
-  const nextOrder = Math.max(0, ...items.map((i) => i.order)) + 1000
-
-  const setParam = (k: string, v: string | null) =>
-    setParams(
-      (p) => {
-        const n = new URLSearchParams(p)
-        if (v === null) n.delete(k)
-        else n.set(k, v)
-        return n
-      },
-      { replace: true },
-    )
-
-  const add = (date: string) => {
-    setEditing(null)
-    setFormDate(date)
-    setFormOpen(true)
-  }
-
-  return (
-    <main className="mx-auto max-w-2xl space-y-4 pt-4">
-      <div className="flex items-center justify-between gap-3 px-4">
-        <ToggleGroup type="single" value={view} onValueChange={(v) => v && setParam('view', v === 'all' ? 'all' : null)} aria-label="Itinerary view">
-          <ToggleGroupItem value="day">By day</ToggleGroupItem>
-          <ToggleGroupItem value="all">All days</ToggleGroupItem>
-        </ToggleGroup>
-        <div className="text-right">
-          <p className="text-[0.6875rem] font-semibold tracking-wide text-muted-foreground uppercase">Planned costs</p>
-          <p className="font-bold tabular-nums">{formatMoney(tripTotal, trip.baseCurrency)}</p>
+      <div className="flex items-center gap-1 px-4 pt-4 pb-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="large-title">{day === today ? 'Today' : `Day ${index + 1}`}</h1>
+          <p className="text-[0.9375rem] text-muted-foreground">
+            {formatLongDate(day)}
+            {day === today && ` · Day ${index + 1}`}
+          </p>
         </div>
+        <Button variant="ghost" size="icon" onClick={() => step(-1)} disabled={index === 0} aria-label="Previous day" className="hidden sm:inline-flex">
+          <ChevronLeft className="size-5" />
+        </Button>
+        <Button variant="ghost" size="icon" onClick={() => step(1)} disabled={index === days.length - 1} aria-label="Next day" className="hidden sm:inline-flex">
+          <ChevronRight className="size-5" />
+        </Button>
+        <Button asChild variant="ghost" size="sm" className="text-primary">
+          <Link to="all" aria-label="All activities">
+            <List /> All
+          </Link>
+        </Button>
       </div>
-      {view === 'day' && <DayPicker days={days} selected={selected} today={today} onSelect={(d) => setParam('day', d)} />}
-      <div className="space-y-8 px-4">
+
+      <div className="min-h-[50dvh] space-y-3 px-4" {...swipe}>
         {loading ? (
-          <div className="space-y-3" aria-busy>
-            <Skeleton className="h-6 w-56" />
-            <Skeleton className="h-20 rounded-[1.25rem]" />
-            <Skeleton className="h-20 rounded-[1.25rem]" />
+          <div className="space-y-2" aria-busy>
+            <Skeleton className="h-14 rounded-2xl" />
+            <Skeleton className="h-40 rounded-2xl" />
           </div>
-        ) : view === 'day' ? (
-          <DaySection date={selected} index={days.indexOf(selected)} items={items} expensesById={expensesById} sortable onOpen={(i) => setParam('item', i.id)} onAdd={add} />
         ) : (
-          days.map((d, idx) => <DaySection key={d} date={d} index={idx} items={items} expensesById={expensesById} sortable={false} onOpen={(i) => setParam('item', i.id)} onAdd={add} />)
+          <>
+            {stays.map((s) => (
+              <StayBanner key={s.stay.id} info={s} onOpen={() => openItem(s.stay)} />
+            ))}
+
+            {activities.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-14 text-center">
+                <CalendarPlus className="size-10 text-muted-foreground/60" aria-hidden />
+                <p className="text-[1.0625rem] font-semibold">Nothing planned for Day {index + 1}</p>
+                <Button variant="secondary" onClick={() => addItem(day)}>
+                  Add an activity
+                </Button>
+              </div>
+            ) : (
+              <>
+                {anytime.length > 0 && (
+                  <section aria-label="Anytime">
+                    <div className="flex items-end justify-between px-4 pb-1.5">
+                      <h2 className="text-[0.8125rem] font-medium text-muted-foreground uppercase">Anytime</h2>
+                      {anytime.length > 1 && (
+                        <button type="button" onClick={() => setReordering((r) => !r)} className="min-h-8 text-[0.9375rem] font-medium text-primary">
+                          {reordering ? 'Done' : 'Edit'}
+                        </button>
+                      )}
+                    </div>
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+                      <SortableContext items={anytime.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+                        <ul className="divide-y divide-border/70 overflow-hidden rounded-2xl ring-1 ring-border/70 [&>li]:pl-0">
+                          {anytime.map((i) =>
+                            reordering ? <SortableRow key={i.id} item={i} onOpen={() => openItem(i)} /> : <ActivityRow key={i.id} item={i} showTime={false} onOpen={() => openItem(i)} />,
+                          )}
+                        </ul>
+                      </SortableContext>
+                    </DndContext>
+                  </section>
+                )}
+                {timed.length > 0 && (
+                  <section aria-label="Schedule">
+                    {anytime.length > 0 && <h2 className="px-4 pb-1.5 pt-2 text-[0.8125rem] font-medium text-muted-foreground uppercase">Schedule</h2>}
+                    <ul className="divide-y divide-border/70 overflow-hidden rounded-2xl ring-1 ring-border/70">
+                      {timed.map((i) => (
+                        <ActivityRow key={i.id} item={i} onOpen={() => openItem(i)} />
+                      ))}
+                    </ul>
+                  </section>
+                )}
+              </>
+            )}
+          </>
         )}
       </div>
 
-      <Fab label="Add plan" withTabBar onClick={() => add(view === 'day' ? selected : defaultDay)} />
-      <ItemFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        item={editing}
-        linkedExpense={editing?.linkedExpenseId ? (expensesById.get(editing.linkedExpenseId) ?? null) : null}
-        defaultDate={formDate}
-        nextOrder={nextOrder}
-      />
-      <ItemSheet
-        item={openItem}
-        expense={openItem?.linkedExpenseId ? expensesById.get(openItem.linkedExpenseId) : undefined}
-        onOpenChange={(o) => !o && setParam('item', null)}
-        onEdit={() => {
-          setEditing(openItem)
-          setParam('item', null)
-          setFormOpen(true)
-        }}
-      />
+      <Fab label="Add activity" withTabBar onClick={() => addItem(day)} />
+      {dialogs}
     </main>
   )
 }

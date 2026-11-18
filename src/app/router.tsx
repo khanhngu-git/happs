@@ -43,6 +43,7 @@ export const router = createBrowserRouter([
                 children: [
                   { index: true, element: <Navigate to="itinerary" replace /> },
                   { path: 'itinerary', lazy: lazy(() => import('@/features/itinerary/ItineraryTab'), 'ItineraryTab') },
+                  { path: 'itinerary/all', lazy: lazy(() => import('@/features/itinerary/AllActivitiesPage'), 'AllActivitiesPage') },
                   { path: 'expenses', lazy: lazy(() => import('@/features/expenses/ExpensesTab'), 'ExpensesTab') },
                   { path: 'map', lazy: lazy(() => import('@/features/map/MapTab'), 'MapTab') },
                   { path: 'members', lazy: lazy(() => import('@/features/trips/MembersTab'), 'MembersTab') },
