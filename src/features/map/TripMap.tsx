@@ -118,6 +118,22 @@ export function TripMap({ stops, selectedId, onSelect }: { stops: MapStop[]; sel
               onClick={() => onSelect(s.item.id)}
               zIndex={selected ? 1000 : s.number !== null ? 500 - s.number : 10}
             >
+              {s.item.photoURL && s.item.type !== 'stay' ? (
+                // Photo pin: the picture itself, ringed in the type colour, with the stop number on a badge.
+                <div className="relative transition-all" style={{ opacity: dimmed ? 0.45 : 1 }} aria-hidden>
+                  <img
+                    src={s.item.photoURL}
+                    alt=""
+                    className="rounded-full border-[3px] object-cover shadow-[0_2px_8px_rgb(0_0_0/0.35)]"
+                    style={{ width: size + 8, height: size + 8, borderColor: meta.hex }}
+                  />
+                  {s.number !== null && (
+                    <span className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full border-2 border-white text-[0.6875rem] font-extrabold text-white" style={{ background: meta.hex }}>
+                      {s.number}
+                    </span>
+                  )}
+                </div>
+              ) : (
               <div
                 className="flex items-center justify-center rounded-full border-[3px] border-white text-white shadow-[0_2px_8px_rgb(0_0_0/0.35)] transition-all"
                 style={{ background: meta.hex, width: size, height: size, opacity: dimmed ? 0.45 : 1 }}
@@ -131,6 +147,7 @@ export function TripMap({ stops, selectedId, onSelect }: { stops: MapStop[]; sel
                   <Icon className="size-4" />
                 )}
               </div>
+              )}
             </AdvancedMarker>
           )
         })}

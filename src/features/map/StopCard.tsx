@@ -14,6 +14,7 @@ export function StopCard({ stop, onClose }: { stop: MapStop; onClose(): void }) 
   const { item } = stop
   return (
     <div className="glass-strong pointer-events-auto rounded-[1.75rem] p-4" role="dialog" aria-label={item.title}>
+      {item.photoURL && <img src={item.photoURL} alt="" className="mb-3 aspect-[2/1] w-full rounded-2xl object-cover" />}
       <div className="flex items-start gap-3">
         <ItemTypeIcon type={item.type} className="size-11" />
         <div className="min-w-0 flex-1">

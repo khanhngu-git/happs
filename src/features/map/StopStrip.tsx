@@ -23,9 +23,20 @@ export function StopStrip({ stops, onSelect }: { stops: MapStop[]; onSelect(id: 
             onClick={() => onSelect(s.item.id)}
             className="glass-strong flex h-16 w-60 items-center gap-3 rounded-2xl px-3 text-left active:scale-[0.98]"
           >
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full border-[3px] border-white text-[0.9375rem] font-extrabold text-white shadow" style={{ background: ITEM_TYPE_META[s.item.type].hex }} aria-hidden>
-              {s.number ?? <Icon type={s.item.type} />}
-            </span>
+            {s.item.photoURL ? (
+              <span className="relative shrink-0" aria-hidden>
+                <img src={s.item.photoURL} alt="" className="size-11 rounded-xl object-cover" />
+                {s.number !== null && (
+                  <span className="absolute -top-1 -left-1 flex size-5 items-center justify-center rounded-full border-2 border-white text-[0.6875rem] font-extrabold text-white" style={{ background: ITEM_TYPE_META[s.item.type].hex }}>
+                    {s.number}
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full border-[3px] border-white text-[0.9375rem] font-extrabold text-white shadow" style={{ background: ITEM_TYPE_META[s.item.type].hex }} aria-hidden>
+                {s.number ?? <Icon type={s.item.type} />}
+              </span>
+            )}
             <span className="min-w-0">
               <span className="block truncate text-[0.9375rem] font-semibold">{s.item.title}</span>
               <span className="block truncate text-[0.8125rem]">{timeLabel(s.item)}</span>

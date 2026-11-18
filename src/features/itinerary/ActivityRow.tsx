@@ -28,7 +28,11 @@ export const ActivityRow = forwardRef<HTMLLIElement, { item: Item; onOpen(): voi
               <TimeCell item={item} />
             </span>
           )}
-          <ItemTypeIcon type={item.type} className="size-8" />
+          {item.photoURL ? (
+            <img src={item.photoURL} alt="" loading="lazy" className="size-10 shrink-0 rounded-xl object-cover" />
+          ) : (
+            <ItemTypeIcon type={item.type} className="size-8" />
+          )}
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[1.0625rem]">{item.title}</span>
             {item.location?.name && item.location.name !== item.title && <span className="block truncate text-[0.875rem] text-muted-foreground">{item.location.name}</span>}
