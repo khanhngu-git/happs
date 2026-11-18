@@ -19,14 +19,14 @@ import { StopCard } from './StopCard'
 const TripMap = lazy(() => import('./TripMap').then((m) => ({ default: m.TripMap })))
 
 /** Filter chips live on the map's functional layer: one glass bar, plain fills inside. */
-function Chip({ on, onClick, children, label, tone = 'accent' }: { on: boolean; onClick(): void; children: React.ReactNode; label?: string; tone?: 'accent' | 'neutral' }) {
+function Chip({ on, onClick, children, label }: { on: boolean; onClick(): void; children: React.ReactNode; label?: string }) {
   return (
     <button
       type="button"
       aria-pressed={on}
       aria-label={label}
       onClick={onClick}
-      className={cn('inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold transition-colors', on ? (tone === 'accent' ? 'bg-primary text-primary-foreground' : 'bg-foreground text-background') : 'bg-foreground/[0.07] text-foreground/80 line-through decoration-foreground/40')}
+      className={cn('inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold transition-colors', on ? 'bg-foreground text-background' : 'text-foreground active:bg-foreground/[0.08]')}
     >
       {children}
     </button>
@@ -40,9 +40,10 @@ export function MapTab() {
   const { data: expenses } = useExpenses(trip.id)
   const days = useMemo(() => tripDays(trip.startDate, trip.endDate), [trip.startDate, trip.endDate])
   const day = days.includes(params.get('day') ?? '') ? params.get('day') : null
-  const hideParam = params.get('hide') ?? ''
-  const hidden = useMemo(() => new Set(hideParam.split(',').filter(Boolean)), [hideParam])
-  const types = useMemo(() => new Set(ITEM_TYPES.filter((t) => !hidden.has(t))), [hidden])
+  // One type at a time (or all), like the day filter.
+  const typeParam = params.get('type') as ItemType | null
+  const type = typeParam && ITEM_TYPES.includes(typeParam) ? typeParam : null
+  const types = useMemo(() => new Set(type ? [type] : ITEM_TYPES), [type])
   const stops = useMemo(() => mapStops(items, day, types), [items, day, types])
   const selectedId = params.get('item')
   const selected = stops.find((s) => s.item.id === selectedId) ?? null
@@ -58,15 +59,9 @@ export function MapTab() {
       },
       { replace: true },
     )
-  const toggleType = (t: ItemType) => {
-    const next = new Set(hidden)
-    if (next.has(t)) next.delete(t)
-    else next.add(t)
-    set('hide', [...next].join(','))
-  }
 
   const filters = (
-    <div className="glass pointer-events-auto space-y-2 rounded-[1.75rem] p-2">
+    <div className="glass pointer-events-auto space-y-1 rounded-[1.5rem] p-1.5">
       <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]" role="group" aria-label="Day">
         <Chip on={!day} onClick={() => set('day', null)}>
           All days
@@ -78,10 +73,13 @@ export function MapTab() {
         ))}
       </div>
       <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]" role="group" aria-label="Type">
+        <Chip on={!type} onClick={() => set('type', null)}>
+          Everything
+        </Chip>
         {ITEM_TYPES.map((t) => {
           const Icon = ITEM_TYPE_META[t].icon
           return (
-            <Chip key={t} tone="neutral" on={types.has(t)} onClick={() => toggleType(t)}>
+            <Chip key={t} on={type === t} onClick={() => set('type', type === t ? null : t)}>
               <Icon className="size-4" aria-hidden /> {ITEM_TYPE_META[t].label}
             </Chip>
           )
@@ -119,7 +117,7 @@ export function MapTab() {
 
   return (
     // Full screen under the header; on wide screens the list sits beside the map.
-    <div className="fixed inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top))] bottom-0 md:grid md:grid-cols-[22rem_1fr]">
+    <div className="fixed inset-x-0 top-[calc(3rem+env(safe-area-inset-top))] bottom-0 md:grid md:grid-cols-[22rem_1fr]">
       <aside className="hidden overflow-y-auto border-r bg-grouped p-3 pb-28 md:block">{list}</aside>
       <div className="relative h-full">
         {hasMaps ? (
