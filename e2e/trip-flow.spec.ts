@@ -89,3 +89,17 @@ test('signed-out deep link bounces through login and back', async ({ page }) => 
   await page.goto('/trips/some-trip/expenses')
   await expect(page).toHaveURL(/\/login\?next=%2Ftrips%2Fsome-trip%2Fexpenses/)
 })
+
+test('join a trip from the Trips page with a pasted link', async ({ page }) => {
+  await signUp(page, testUser('Joiner'))
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Join a trip' }).click()
+  const box = page.getByLabel('Invite link or code')
+  await box.fill('not an invite')
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await expect(page.getByText('That doesn’t look like a happs invite link.')).toBeVisible()
+  await box.fill('Join “Shanghai” on happs http://localhost:5174/join/AbCdEfGhJk12')
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await expect(page).toHaveURL(/\/join\/AbCdEfGhJk12$/)
+  await expect(page.getByText('This invite can’t be used')).toBeVisible()
+})

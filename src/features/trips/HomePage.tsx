@@ -1,6 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Luggage } from 'lucide-react'
+import { ChevronRight, Luggage, Ticket } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
@@ -15,6 +15,7 @@ import { VerifyEmailBanner } from '@/features/auth/VerifyEmailBanner'
 import { tripPhase, type TripPhase } from '@/shared/dates'
 import type { Trip } from '@/lib/firestore'
 import { TripCard } from './TripCard'
+import { JoinTripDialog } from '@/features/invites/JoinTripDialog'
 import { useMyTrips } from './tripApi'
 
 const SECTIONS: { phase: TripPhase; title: string }[] = [
@@ -28,6 +29,7 @@ export function HomePage() {
   const { profile } = useAuth()
   const navigate = useNavigate()
   const { data: trips, loading, error } = useMyTrips(user.uid)
+  const [joining, setJoining] = useState(false)
 
   const grouped = useMemo(() => {
     const out: Record<TripPhase, Trip[]> = { ongoing: [], upcoming: [], past: [] }
@@ -66,8 +68,15 @@ export function HomePage() {
             <EmptyState
               icon={<Luggage />}
               title="No trips yet"
-              description="Create a trip, invite your friends, and plan it together. Got an invite link? Just open it."
-              action={<Button onClick={() => navigate('/trips/new')}>Plan a trip</Button>}
+              description="Create a trip and invite your friends, or join one a friend has already started."
+              action={
+                <div className="flex w-full max-w-xs flex-col gap-2">
+                  <Button onClick={() => navigate('/trips/new')}>Plan a trip</Button>
+                  <Button variant="secondary" onClick={() => setJoining(true)}>
+                    Join a trip
+                  </Button>
+                </div>
+              }
             />
           ) : (
             SECTIONS.filter((s) => grouped[s.phase].length > 0).map((s) => (
@@ -83,9 +92,21 @@ export function HomePage() {
               </section>
             ))
           )}
+          {trips.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setJoining(true)}
+              className="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-card px-4 text-left ring-1 ring-border/70 active:bg-foreground/[0.06]"
+            >
+              <Ticket className="size-5 text-primary" aria-hidden />
+              <span className="flex-1 text-[1.0625rem]">Join a trip with an invite</span>
+              <ChevronRight className="size-4 text-muted-foreground/70" aria-hidden />
+            </button>
+          )}
         </div>
       </main>
       {trips.length > 0 && <Fab label="New trip" extended onClick={() => navigate('/trips/new')} />}
+      <JoinTripDialog open={joining} onOpenChange={setJoining} />
     </>
   )
 }
