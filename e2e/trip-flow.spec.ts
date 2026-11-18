@@ -46,21 +46,24 @@ test('two friends plan a trip and settle a cost', async ({ browser }) => {
 
   // 4. Alex adds a dinner with a cost split equally between both.
   await a.getByRole('link', { name: 'Itinerary' }).click()
-  await a.getByRole('button', { name: 'Add plan' }).click()
+  await a.getByRole('button', { name: 'Add activity' }).click()
   await a.getByPlaceholder('The Bund at night').fill('Dinner at Lost Heaven')
+  await a.getByLabel('Date').fill('2026-12-05')
   await a.getByLabel('Starts').fill('19:30')
+  await a.getByRole('button', { name: /More details/ }).click()
   await a.getByRole('switch', { name: 'This has a cost' }).click()
   await a.getByLabel('Amount', { exact: true }).fill('100')
-  await a.getByRole('button', { name: 'Add to plan' }).click()
+  await a.getByRole('button', { name: 'Add', exact: true }).click()
   await expect(a.getByText('Dinner at Lost Heaven')).toBeVisible()
-  await expect(a.getByText('A$100.00').first()).toBeVisible()
 
   // Sam sees the plan appear live in their itinerary.
   await expect(b.getByText('Dinner at Lost Heaven')).toBeVisible()
 
   // 5. Sam marks their half as paid.
   await b.getByRole('link', { name: 'Expenses' }).click()
-  await expect(b.getByText(`You owe ${alex.name}`)).toBeVisible()
+  const youOwe = b.getByRole('region', { name: 'You owe' })
+  await expect(youOwe.getByText(alex.name)).toBeVisible()
+  await expect(youOwe.getByText('A$50.00')).toBeVisible()
   await b.getByText('Dinner at Lost Heaven').click()
   await b.getByRole('button', { name: 'I’ve paid' }).click()
   await b.getByRole('radio', { name: 'PayID' }).click()
@@ -72,10 +75,11 @@ test('two friends plan a trip and settle a cost', async ({ browser }) => {
   await a.getByRole('link', { name: 'Expenses' }).click()
   await expect(a.getByRole('heading', { name: 'Needs your confirmation' })).toBeVisible()
   await a.getByRole('button', { name: 'Confirm received' }).click()
-  await expect(a.getByText('Everyone’s square. Nice.')).toBeVisible()
+  await expect(a.getByText('You’re all settled up')).toBeVisible()
 
   // Sam's view updates to paid and the balance clears.
-  await expect(b.getByText('Everyone’s square. Nice.')).toBeVisible()
+  await b.keyboard.press('Escape')
+  await expect(b.getByText('You’re all settled up')).toBeVisible()
 
   await ctxA.close()
   await ctxB.close()

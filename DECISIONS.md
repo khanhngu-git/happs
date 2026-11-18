@@ -42,3 +42,18 @@ The `liquid-glass` skill (github.com/heyparsadev/liquid-glass-skill) targets Swi
 - **Deleting an account** refuses while any share involving you is unconfirmed. Otherwise you're removed from every trip: ownership passes to the longest-standing member, and trips where you were the only member are deleted.
 - **Map without a key**: the Map tab shows the same filtered, numbered stop list. The Places picker falls back to typed name and address.
 - **Lighthouse PWA category**: Lighthouse 12+ removed it. `e2e/pwa.spec.ts` checks the same criteria against a production build (standalone manifest, 192/512 and maskable icons, a controlling service worker, offline navigation).
+
+## Simplification pass (iOS feel)
+- **No top bar.** Back, trip switcher and icon actions sit in one row that scrolls with the content, directly above each screen's large title (iOS large-title layout). The only glass left is the floating tab bar, the "+" button, map controls and sheets.
+- **Itinerary is only about what you're doing.** No costs, subtotals or type labels. The day view uses an iOS Calendar-style strip. It opens on today and moves to the next day on its own at local midnight (checked every minute and when the app returns to the foreground). Swipe left or right to change day. Picking today again goes back to following the date automatically.
+- **Reordering hides behind "Edit"** (iOS list edit mode) instead of always-visible drag handles.
+- **All activities** is its own plain page (`itinerary/all`): days and rows, nothing else.
+- **Item form**: notes, booking and "Split a cost" sit behind "More details". Adding a cost still creates the shared expense.
+- **Expenses isn't a budget tracker.** No net, no totals, no avatar stacks. It shows only what involves you: "Needs your confirmation" (when there is something), **You owe** and **Owes you** by person (never yourself), then a plain list of expenses. Your own share shows as one short line ("You owe A$33.33", "Paid").
+- **Map filters are single-select** for day and for type ("Everything" or one type). No strikethrough or crossed-out states.
+
+## Google sign-in
+- **Popup first.** Redirect is used only in the installed PWA, or when a popup is blocked. Redirect needs same-site auth storage, which Safari and embedded webviews partition away when the auth handler is on another site. The result came back empty with no error.
+- **Emulator:** the Auth emulator is reached via `localhost` (same site as the dev server) rather than `127.0.0.1`.
+- **Real project in dev:** set `VITE_AUTH_SAME_ORIGIN=true`. Vite then proxies `/__/auth` to the project's auth domain, the same way Firebase Hosting does in production. Add `http://localhost:5173/__/auth/handler` to the OAuth client's redirect URIs. `localhost` is an authorized domain on the project; `127.0.0.1` is not.
+- A redirect that comes back empty now shows "Google sign-in didn't finish" instead of failing silently. Disabled providers and unauthorized domains get specific messages.
