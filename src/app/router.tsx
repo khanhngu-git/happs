@@ -12,9 +12,9 @@ import { TripLayout } from '@/features/trips/TripLayout'
 import { MembersTab } from '@/features/trips/MembersTab'
 import { TripSettingsPage } from '@/features/trips/TripSettingsPage'
 import { JoinPage } from '@/features/invites/JoinPage'
-import { Placeholder } from './Placeholder'
 import { ItineraryTab } from '@/features/itinerary/ItineraryTab'
 import { ExpensesTab } from '@/features/expenses/ExpensesTab'
+import { MapTab } from '@/features/map/MapTab'
 import { NotificationsPage } from '@/features/notifications/NotificationsPage'
 import { ProfilePage } from '@/features/profile/ProfilePage'
 
@@ -47,7 +47,7 @@ export const router = createBrowserRouter([
                   { index: true, element: <Navigate to="itinerary" replace /> },
                   { path: 'itinerary', element: <ItineraryTab /> },
                   { path: 'expenses', element: <ExpensesTab /> },
-                  { path: 'map', element: <Placeholder name="Map" /> },
+                  { path: 'map', element: <MapTab /> },
                   { path: 'members', element: <MembersTab /> },
                   { path: 'settings', element: <TripSettingsPage /> },
                 ],
