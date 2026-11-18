@@ -1,8 +1,13 @@
+import { RouterProvider } from 'react-router'
+import { Toaster } from '@/components/ui/sonner'
+import { AuthProvider } from '@/features/auth/AuthProvider'
+import { router } from './router'
+
 export function App() {
   return (
-    <main className="mx-auto max-w-md p-6">
-      <h1 className="text-2xl font-semibold">happs</h1>
-      <p className="text-muted-foreground">Group trip planner</p>
-    </main>
+    <AuthProvider>
+      <RouterProvider router={router} />
+      <Toaster />
+    </AuthProvider>
   )
 }
