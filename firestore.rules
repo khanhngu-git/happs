@@ -1,0 +1,409 @@
+rules_version = '2';
+
+// happs security rules. Every rule here is covered by tests/rules.
+//
+// Principles:
+// - Trip data is visible only to users in the trip's memberIds.
+// - memberIds is never client-editable (joinTrip / removeMember functions own it).
+// - Shares are created by Cloud Functions only. Clients may only move a
+//   share's status along the payment state machine (see src/shared/shareState.ts).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ---------------- helpers ---------------- */
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function me() {
+      return request.auth.uid;
+    }
+
+    function tripPath(tripId) {
+      return /databases/$(database)/documents/trips/$(tripId);
+    }
+
+    function trip(tripId) {
+      return get(tripPath(tripId)).data;
+    }
+
+    function isMember(tripId) {
+      return signedIn() && exists(tripPath(tripId)) && me() in trip(tripId).memberIds;
+    }
+
+    function isOwner(tripId) {
+      return signedIn() && exists(tripPath(tripId)) && trip(tripId).ownerId == me();
+    }
+
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    function onlyChanges(keys) {
+      return changedKeys().hasOnly(keys);
+    }
+
+    function unchanged(keys) {
+      return !changedKeys().hasAny(keys);
+    }
+
+    function isDate(v) {
+      return v is string && v.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$');
+    }
+
+    function isTime(v) {
+      return v is string && v.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$');
+    }
+
+    function isTimeOrNull(v) {
+      return v == null || isTime(v);
+    }
+
+    function isCurrency(v) {
+      return v is string && v.matches('^[A-Z]{3}$');
+    }
+
+    function isStr(v, max) {
+      return v is string && v.size() <= max;
+    }
+
+    function isNonEmptyStr(v, max) {
+      return v is string && v.size() > 0 && v.size() <= max;
+    }
+
+    function optStr(d, key, max) {
+      return !(key in d) || isStr(d[key], max);
+    }
+
+    // Client timestamps (used inside arrays, where serverTimestamp() is not
+    // supported) must be within 5 minutes of the server clock.
+    function isRecent(t) {
+      return t is timestamp
+        && t > request.time - duration.value(5, 'm')
+        && t < request.time + duration.value(5, 'm');
+    }
+
+    /* ---------------- users ---------------- */
+
+    match /users/{userId} {
+      function validUser(d) {
+        return d.keys().hasOnly(['displayName', 'email', 'photoURL', 'defaultCurrency', 'createdAt', 'notificationPrefs'])
+          && isStr(d.displayName, 100)
+          && (!('defaultCurrency' in d) || isCurrency(d.defaultCurrency))
+          && (!('notificationPrefs' in d) || d.notificationPrefs is map);
+      }
+
+      allow read: if signedIn() && me() == userId;
+      allow create, update: if signedIn() && me() == userId && validUser(request.resource.data);
+      // Account deletion goes through the deleteAccount function.
+      allow delete: if false;
+
+      match /fcmTokens/{token} {
+        allow read, write: if signedIn() && me() == userId;
+      }
+
+      // Notifications are written by Cloud Functions only. Owners can read
+      // them, flip `read`, and clear them.
+      match /notifications/{notificationId} {
+        allow read: if signedIn() && me() == userId;
+        allow update: if signedIn() && me() == userId
+          && onlyChanges(['read'])
+          && request.resource.data.read is bool;
+        allow delete: if signedIn() && me() == userId;
+        allow create: if false;
+      }
+    }
+
+    /* ---------------- trips ---------------- */
+
+    match /trips/{tripId} {
+      function validTrip(d) {
+        return d.keys().hasAll(['name', 'startDate', 'endDate', 'timeZone', 'baseCurrency', 'ownerId', 'memberIds'])
+          && d.keys().hasOnly(['name', 'destination', 'startDate', 'endDate', 'timeZone', 'baseCurrency',
+                               'ownerId', 'memberIds', 'coverEmoji', 'coverColor', 'createdAt', 'updatedAt'])
+          && isNonEmptyStr(d.name, 100)
+          && optStr(d, 'destination', 200)
+          && isDate(d.startDate) && isDate(d.endDate) && d.startDate <= d.endDate
+          && isNonEmptyStr(d.timeZone, 64)
+          && isCurrency(d.baseCurrency)
+          && d.memberIds is list;
+      }
+
+      allow read: if signedIn() && me() in resource.data.memberIds;
+
+      allow create: if signedIn()
+        && request.resource.data.ownerId == me()
+        && request.resource.data.memberIds == [me()]
+        && validTrip(request.resource.data);
+
+      // Only the owner edits trip details. memberIds is never client editable.
+      // The owner may hand ownership to an existing member.
+      allow update: if signedIn()
+        && resource.data.ownerId == me()
+        && validTrip(request.resource.data)
+        && request.resource.data.memberIds == resource.data.memberIds
+        && request.resource.data.ownerId in resource.data.memberIds;
+
+      allow delete: if signedIn() && resource.data.ownerId == me();
+
+      /* ---- members ---- */
+      match /members/{memberId} {
+        allow read: if isMember(tripId);
+
+        // Only the creator's own owner doc, written in the same batch as the trip.
+        allow create: if signedIn()
+          && memberId == me()
+          && !exists(tripPath(tripId))
+          && getAfter(tripPath(tripId)).data.ownerId == me()
+          && request.resource.data.keys().hasOnly(['role', 'displayName', 'photoURL', 'joinedAt'])
+          && request.resource.data.role == 'owner';
+
+        // Members update their own name/photo; the owner changes roles.
+        allow update: if signedIn() && (
+          (memberId == me() && isMember(tripId) && onlyChanges(['displayName', 'photoURL'])
+            && isStr(request.resource.data.displayName, 100))
+          || (isOwner(tripId) && onlyChanges(['role']) && request.resource.data.role in ['owner', 'member'])
+        );
+
+        // Removal goes through the removeMember function.
+        allow delete: if false;
+      }
+
+      /* ---- invites ---- */
+      match /invites/{code} {
+        allow read: if isMember(tripId);
+
+        allow create: if isMember(tripId)
+          && code.size() >= 10 && code.size() <= 64
+          && request.resource.data.keys().hasOnly(['code', 'createdBy', 'createdAt', 'expiresAt', 'maxUses', 'uses', 'revoked'])
+          && request.resource.data.code == code
+          && request.resource.data.createdBy == me()
+          && request.resource.data.uses == 0
+          && request.resource.data.revoked == false
+          && (request.resource.data.maxUses == null || (request.resource.data.maxUses is int && request.resource.data.maxUses > 0))
+          && (request.resource.data.expiresAt == null || request.resource.data.expiresAt is timestamp);
+
+        // Owner (or the invite's creator) can revoke. `uses` is server only.
+        allow update: if isMember(tripId)
+          && (isOwner(tripId) || resource.data.createdBy == me())
+          && onlyChanges(['revoked'])
+          && request.resource.data.revoked == true;
+
+        allow delete: if false;
+      }
+
+      /* ---- itinerary items ---- */
+      match /items/{itemId} {
+        function validDateTime(v) {
+          return v == null || (v is map && v.keys().hasOnly(['date', 'time']) && isDate(v.date) && isTimeOrNull(v.time));
+        }
+
+        function validLocation(v) {
+          return v == null || (v is map
+            && v.keys().hasOnly(['placeId', 'name', 'address', 'lat', 'lng'])
+            && isStr(v.name, 300)
+            && (v.lat == null || (v.lat is number && v.lat >= -90 && v.lat <= 90))
+            && (v.lng == null || (v.lng is number && v.lng >= -180 && v.lng <= 180)));
+        }
+
+        function validItem(d) {
+          return d.keys().hasAll(['type', 'title', 'date', 'createdBy'])
+            && d.keys().hasOnly(['type', 'title', 'date', 'startTime', 'endTime', 'checkIn', 'checkOut', 'location',
+                                 'notes', 'bookingUrl', 'bookingRef', 'order', 'linkedExpenseId', 'createdBy',
+                                 'createdAt', 'updatedAt'])
+            && d.type in ['activity', 'food', 'transport', 'stay', 'other']
+            && isNonEmptyStr(d.title, 200)
+            && isDate(d.date)
+            && isTimeOrNull(d.get('startTime', null))
+            && isTimeOrNull(d.get('endTime', null))
+            && validDateTime(d.get('checkIn', null))
+            && validDateTime(d.get('checkOut', null))
+            && validLocation(d.get('location', null))
+            && optStr(d, 'notes', 5000)
+            && optStr(d, 'bookingUrl', 2000)
+            && optStr(d, 'bookingRef', 200)
+            && (!('order' in d) || d.order is number)
+            && (d.get('linkedExpenseId', null) == null || d.linkedExpenseId is string);
+        }
+
+        allow read: if isMember(tripId);
+        allow create: if isMember(tripId)
+          && validItem(request.resource.data)
+          && request.resource.data.createdBy == me();
+        allow update: if isMember(tripId)
+          && validItem(request.resource.data)
+          && request.resource.data.createdBy == resource.data.createdBy;
+        allow delete: if isMember(tripId) && (resource.data.createdBy == me() || isOwner(tripId));
+      }
+
+      /* ---- expenses ---- */
+      match /expenses/{expenseId} {
+        function validExpense(d) {
+          let t = trip(tripId);
+          return d.keys().hasAll(['title', 'amountMinor', 'currency', 'fxRateToBase', 'amountBaseMinor', 'paidBy',
+                                  'splitMethod', 'participantIds', 'date', 'createdBy'])
+            && d.keys().hasOnly(['title', 'amountMinor', 'currency', 'fxRateToBase', 'amountBaseMinor', 'paidBy',
+                                 'splitMethod', 'participantIds', 'splitValues', 'category', 'date', 'linkedItemId',
+                                 'createdBy', 'createdAt', 'updatedAt'])
+            && isNonEmptyStr(d.title, 200)
+            && d.amountMinor is int && d.amountMinor >= 0
+            && isCurrency(d.currency)
+            && d.fxRateToBase is number && d.fxRateToBase > 0
+            && d.amountBaseMinor is int && d.amountBaseMinor >= 0
+            && d.paidBy in t.memberIds
+            && d.splitMethod in ['equal', 'exact', 'percent']
+            && d.participantIds is list && d.participantIds.size() > 0 && d.participantIds.size() <= 50
+            && t.memberIds.hasAll(d.participantIds)
+            && (d.get('splitValues', null) == null || d.splitValues is map)
+            && optStr(d, 'category', 40)
+            && isDate(d.date)
+            && (d.get('linkedItemId', null) == null || d.linkedItemId is string);
+        }
+
+        allow read: if isMember(tripId);
+        allow create: if isMember(tripId)
+          && validExpense(request.resource.data)
+          && request.resource.data.createdBy == me();
+        allow update: if isMember(tripId)
+          && validExpense(request.resource.data)
+          && request.resource.data.createdBy == resource.data.createdBy;
+        allow delete: if isMember(tripId) && (resource.data.createdBy == me() || isOwner(tripId));
+
+        /* ---- shares: the payment state machine ----
+         *   unpaid   --debtor-->  sent       (markSent)
+         *   disputed --debtor-->  sent       (re-send)
+         *   sent     --payer--->  confirmed  (confirm)
+         *   sent     --payer--->  disputed   (not received)
+         *   unpaid   --payer--->  confirmed  (mark as received, e.g. cash)
+         */
+        match /shares/{shareUid} {
+          function before() {
+            return resource.data;
+          }
+
+          function after() {
+            return request.resource.data;
+          }
+
+          // Identity and money fields are server-owned: never client editable.
+          function immutableFieldsKept() {
+            return unchanged(['debtorUid', 'payerUid', 'amountMinor', 'amountBaseMinor', 'tripId', 'expenseId',
+                              'currency', 'expenseTitle']);
+          }
+
+          // history may only grow by exactly one entry, authored by the caller,
+          // recording the new status. Earlier entries must be untouched.
+          function historyAppended() {
+            let n = before().history.size();
+            let entry = after().history[n];
+            return after().history is list
+              && after().history.size() == n + 1
+              && after().history[0:n] == before().history
+              && entry.keys().hasOnly(['status', 'byUid', 'at', 'note'])
+              && entry.byUid == me()
+              && entry.status == after().status
+              && isRecent(entry.at)
+              && isStr(entry.get('note', ''), 500);
+          }
+
+          function isDebtor() {
+            return me() == before().debtorUid && before().debtorUid != before().payerUid;
+          }
+
+          function isPayer() {
+            return me() == before().payerUid && before().debtorUid != before().payerUid;
+          }
+
+          function validMethod(v) {
+            return v == null || v in ['bank', 'payid', 'cash', 'paypal', 'other'];
+          }
+
+          function debtorMarksSent() {
+            return isDebtor()
+              && before().status in ['unpaid', 'disputed']
+              && after().status == 'sent'
+              && onlyChanges(['status', 'method', 'reference', 'note', 'batchId', 'history', 'updatedAt'])
+              && validMethod(after().get('method', null))
+              && isStr(after().get('reference', ''), 200)
+              && isStr(after().get('note', ''), 500)
+              && (after().get('batchId', null) == null || after().batchId is string);
+          }
+
+          function payerConfirms() {
+            return isPayer()
+              && before().status == 'sent'
+              && after().status == 'confirmed'
+              && onlyChanges(['status', 'history', 'updatedAt']);
+          }
+
+          function payerDisputes() {
+            return isPayer()
+              && before().status == 'sent'
+              && after().status == 'disputed'
+              && onlyChanges(['status', 'history', 'updatedAt']);
+          }
+
+          function payerMarksReceived() {
+            return isPayer()
+              && before().status == 'unpaid'
+              && after().status == 'confirmed'
+              && onlyChanges(['status', 'method', 'history', 'updatedAt'])
+              && validMethod(after().get('method', null));
+          }
+
+          allow read: if isMember(tripId);
+          allow create, delete: if false;
+          allow update: if isMember(tripId)
+            && immutableFieldsKept()
+            && historyAppended()
+            && (debtorMarksSent() || payerConfirms() || payerDisputes() || payerMarksReceived());
+        }
+      }
+
+      /* ---- settle-up batches ---- */
+      match /settlementBatches/{batchId} {
+        allow read: if isMember(tripId);
+        allow create: if isMember(tripId)
+          && request.resource.data.keys().hasOnly(['tripId', 'fromUid', 'toUid', 'shareRefs', 'totalBaseMinor', 'status', 'createdAt'])
+          && request.resource.data.tripId == tripId
+          && request.resource.data.fromUid == me()
+          && request.resource.data.toUid in trip(tripId).memberIds
+          && request.resource.data.toUid != me()
+          && request.resource.data.status == 'sent'
+          && request.resource.data.shareRefs is list
+          && request.resource.data.totalBaseMinor is int;
+        // The receiver confirms or disputes the batch; the sender may re-send a disputed one.
+        allow update: if isMember(tripId) && onlyChanges(['status']) && (
+          (resource.data.toUid == me() && resource.data.status == 'sent' && request.resource.data.status in ['confirmed', 'disputed'])
+          || (resource.data.fromUid == me() && resource.data.status == 'disputed' && request.resource.data.status == 'sent')
+        );
+        allow delete: if false;
+      }
+    }
+
+    /* ---------------- cross-trip share queries ----------------
+     * collectionGroup('shares') where debtorUid == me / payerUid == me, or
+     * where tripId == X for a trip I belong to.
+     */
+    match /{path=**}/shares/{shareUid} {
+      allow read: if signedIn() && (
+        resource.data.debtorUid == me()
+        || resource.data.payerUid == me()
+        || isMember(resource.data.tripId)
+      );
+    }
+
+    /* ---------------- feedback ---------------- */
+    match /feedback/{feedbackId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'message', 'appVersion', 'userAgent', 'url', 'createdAt'])
+        && request.resource.data.uid == me()
+        && isNonEmptyStr(request.resource.data.message, 4000)
+        && isStr(request.resource.data.appVersion, 40)
+        && isStr(request.resource.data.userAgent, 500)
+        && isStr(request.resource.data.url, 500);
+      allow read, update, delete: if false;
+    }
+  }
+}
