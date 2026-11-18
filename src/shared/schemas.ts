@@ -78,6 +78,8 @@ export const memberSchema = z.object({
 export type MemberDoc = z.infer<typeof memberSchema>
 
 export const inviteSchema = z.object({
+  /** Same as the doc id; stored so joinTrip can find it with a collection-group query. */
+  code: z.string(),
   createdBy: z.string(),
   createdAt: timestamp.optional(),
   expiresAt: timestamp.nullable().default(null),
@@ -182,6 +184,7 @@ export const notificationSchema = z.object({
   refPath: z.string().nullable().default(null),
   title: z.string(),
   body: z.string().default(''),
+  url: z.string().nullable().default(null),
   read: z.boolean().default(false),
   createdAt: timestamp.optional(),
 })
