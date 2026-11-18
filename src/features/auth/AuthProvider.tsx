@@ -5,7 +5,8 @@ import { auth } from '@/lib/firebase'
 import { refs, useLiveDoc, type UserProfile } from '@/lib/firestore'
 import { DEFAULT_NOTIFICATION_PREFS } from '@/shared/schemas'
 import { guessCurrency } from '@/shared/money'
-import { completeRedirectSignIn, NeedsLinkingError } from './authApi'
+import { toast } from 'sonner'
+import { authErrorMessage, completeRedirectSignIn, NeedsLinkingError } from './authApi'
 
 interface AuthState {
   user: User | null
@@ -50,7 +51,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     completeRedirectSignIn().catch((err) => {
       if (err instanceof NeedsLinkingError) setLinkingEmail(err.email ?? '')
-      else console.error('Redirect sign-in failed', err)
+      else {
+        console.error('Redirect sign-in failed', err)
+        toast.error(authErrorMessage(err))
+      }
     })
     return onAuthStateChanged(auth, async (u) => {
       if (u) await ensureUserDoc(u)

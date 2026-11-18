@@ -31,9 +31,6 @@ export function isStandalone(): boolean {
   )
 }
 
-export function isMobile(): boolean {
-  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform))
-}
 
 function googleProvider() {
   const p = new GoogleAuthProvider()
@@ -63,27 +60,47 @@ function handleLinkingError(err: unknown): never {
   throw err
 }
 
+const REDIRECT_PENDING = 'happs.googleRedirectPending'
+
+/**
+ * Popup everywhere it works (desktop and mobile browsers, from a tap).
+ * Redirect only in an installed PWA, where iOS opens popups in a separate
+ * Safari window, or when the popup is blocked. Redirect relies on
+ * same-origin auth (Firebase Hosting); see lib/firebase.ts.
+ */
 export async function signInWithGoogle(): Promise<void> {
-  const usePopup = !isMobile() && !isStandalone()
+  const useRedirect = isStandalone()
   try {
-    if (usePopup) await signInWithPopup(auth, googleProvider())
-    else await signInWithRedirect(auth, googleProvider())
+    if (useRedirect) return await startRedirect()
+    await signInWithPopup(auth, googleProvider())
   } catch (err) {
     const code = (err as AuthError)?.code
-    // Popup blocked → fall back to redirect.
-    if (usePopup && (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment')) {
-      await signInWithRedirect(auth, googleProvider())
-      return
-    }
-    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return
+    if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') return startRedirect()
+    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request' || code === 'auth/user-cancelled') return
     handleLinkingError(err)
+  }
+}
+
+async function startRedirect() {
+  sessionStorage.setItem(REDIRECT_PENDING, String(Date.now()))
+  await signInWithRedirect(auth, googleProvider())
+}
+
+export class RedirectIncompleteError extends Error {
+  constructor() {
+    super('Google sign-in didn’t finish. Please try again.')
+    this.name = 'RedirectIncompleteError'
   }
 }
 
 /** Call once on app load to finish a redirect sign-in. */
 export async function completeRedirectSignIn(): Promise<void> {
+  const pending = sessionStorage.getItem(REDIRECT_PENDING)
+  sessionStorage.removeItem(REDIRECT_PENDING)
   try {
-    await getRedirectResult(auth)
+    const result = await getRedirectResult(auth)
+    // We started a redirect but came back with nothing: storage was lost on the way.
+    if (pending && !result && !auth.currentUser) throw new RedirectIncompleteError()
   } catch (err) {
     handleLinkingError(err)
   }
@@ -146,7 +163,7 @@ export async function signOut(): Promise<void> {
 
 /** Turn Firebase auth error codes into friendly messages. */
 export function authErrorMessage(err: unknown): string {
-  if (err instanceof NeedsLinkingError) return err.message
+  if (err instanceof NeedsLinkingError || err instanceof RedirectIncompleteError) return err.message
   const code = (err as AuthError)?.code ?? ''
   const map: Record<string, string> = {
     'auth/invalid-credential': 'That email and password don’t match.',
@@ -160,6 +177,10 @@ export function authErrorMessage(err: unknown): string {
     'auth/network-request-failed': 'Network problem. Check your connection.',
     'auth/requires-recent-login': 'Please sign out and in again, then retry.',
     'auth/credential-already-in-use': 'That Google account is already linked to another happs account.',
+    'auth/unauthorized-domain': `This address (${location.hostname}) isn’t allowed to sign in. Add it under Firebase → Authentication → Settings → Authorized domains.`,
+    'auth/operation-not-allowed': 'Google sign-in is turned off for this project. Enable it in Firebase → Authentication → Sign-in method.',
+    'auth/popup-blocked': 'Your browser blocked the sign-in window. Allow pop-ups for this site and try again.',
+    'auth/internal-error': 'Google sign-in failed. Check your connection and try again.',
   }
   return map[code] ?? (err instanceof Error ? err.message : 'Something went wrong.')
 }

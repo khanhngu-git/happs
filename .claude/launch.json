@@ -4,7 +4,7 @@
     {
       "name": "happs-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "5173", "--strictPort", "--host", "127.0.0.1"],
+      "runtimeArgs": ["run", "dev", "--", "--port", "5173", "--strictPort", "--host", "localhost"],
       "port": 5173
     }
   ]

@@ -27,6 +27,8 @@ export const FUNCTIONS_REGION = env.VITE_FUNCTIONS_REGION || 'australia-southeas
  */
 function resolveAuthDomain(): string {
   const configured = env.VITE_FIREBASE_AUTH_DOMAIN as string
+  // Dev against the real project: Vite proxies /__/auth to the configured domain.
+  if (env.DEV && env.VITE_USE_EMULATORS !== 'true' && env.VITE_AUTH_SAME_ORIGIN === 'true' && typeof location !== 'undefined') return location.host
   if (env.PROD && env.VITE_AUTH_SAME_ORIGIN !== 'false' && typeof location !== 'undefined') {
     const host = location.host
     if (host.endsWith('.web.app') || host.endsWith('.firebaseapp.com') || env.VITE_AUTH_SAME_ORIGIN === 'true') return host
@@ -60,7 +62,12 @@ export const functions = getFunctions(app, FUNCTIONS_REGION)
 
 if (USE_EMULATORS) {
   const host = env.VITE_EMULATOR_HOST || '127.0.0.1'
-  connectAuthEmulator(auth, `http://${host}:9099`, { disableWarnings: true })
+  // Auth goes through `localhost` so its redirect iframe is same-site with the
+  // dev server (localhost:5173). With 127.0.0.1 it is cross-site, and browsers
+  // that partition third-party storage (Safari, embedded webviews) silently
+  // drop the Google redirect result.
+  const authHost = env.VITE_EMULATOR_HOST || (location.hostname === 'localhost' ? 'localhost' : host)
+  connectAuthEmulator(auth, `http://${authHost}:9099`, { disableWarnings: true })
   connectFirestoreEmulator(db, host, 8080)
   connectFunctionsEmulator(functions, host, 5001)
 }

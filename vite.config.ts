@@ -1,12 +1,14 @@
 /// <reference types="vitest/config" />
 import { fileURLToPath, URL } from 'node:url'
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), 'VITE_')
+  return {
   define: { __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.0.0') },
   plugins: [
     react(),
@@ -42,6 +44,16 @@ export default defineConfig({
       },
     }),
   ],
+  server: {
+    // Same-origin Firebase Auth in dev (VITE_AUTH_SAME_ORIGIN=true, real project):
+    // the auth handler is proxied so redirect sign-in isn't cross-site.
+    proxy: env.VITE_FIREBASE_AUTH_DOMAIN
+      ? {
+          '/__/auth': { target: `https://${env.VITE_FIREBASE_AUTH_DOMAIN}`, changeOrigin: true },
+          '/__/firebase': { target: `https://${env.VITE_FIREBASE_AUTH_DOMAIN}`, changeOrigin: true },
+        }
+      : undefined,
+  },
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
@@ -51,4 +63,5 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
   },
+}
 })
