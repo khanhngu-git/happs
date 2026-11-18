@@ -24,14 +24,15 @@ import { PhotoPicker } from '@/components/PhotoPicker'
 import { removeByUrl, uploadAvatar } from '@/lib/uploads'
 import { FullScreenLoader } from '@/components/FullScreenLoader'
 
-const PREF_LABELS: Record<NotificationType, { title: string; hint: string }> = {
-  shareSent: { title: 'Someone says they paid you', hint: 'So you can confirm it arrived' },
-  shareConfirmed: { title: 'Your payment was confirmed', hint: '' },
-  shareDisputed: { title: 'Your payment wasn’t received', hint: '' },
-  confirmReminder: { title: 'Reminders to confirm', hint: 'After 48 hours waiting' },
-  memberJoined: { title: 'Someone joined a trip', hint: '' },
-  itemChanged: { title: 'Plans added or changed', hint: 'Can be chatty in busy trips' },
-}
+/**
+ * Three simple switches. Each one covers a group of notification types the
+ * server sends (see NotificationType); a group is "on" if any of its types is.
+ */
+const PREF_GROUPS: { key: string; title: string; hint: string; types: NotificationType[] }[] = [
+  { key: 'itinerary', title: 'Itinerary changes', hint: 'Plans added or edited', types: ['itemChanged'] },
+  { key: 'payments', title: 'Payments', hint: 'Paid, confirmed or not received', types: ['shareSent', 'shareConfirmed', 'shareDisputed', 'confirmReminder'] },
+  { key: 'members', title: 'New members', hint: 'Someone joins a trip', types: ['memberJoined'] },
+]
 
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -98,8 +99,8 @@ function ProfileForm() {
     }
   }
 
-  const setPref = (type: NotificationType, on: boolean) =>
-    updateDoc(doc(db, 'users', user.uid), { notificationPrefs: { ...prefs, [type]: on } }).catch(() => toast.error('Couldn’t save'))
+  const setGroup = (types: NotificationType[], on: boolean) =>
+    updateDoc(doc(db, 'users', user.uid), { notificationPrefs: { ...prefs, ...Object.fromEntries(types.map((t) => [t, on])) } }).catch(() => toast.error('Couldn’t save'))
 
   return (
     <>
@@ -186,13 +187,13 @@ function ProfileForm() {
               }}
             />
           </div>
-          {(Object.keys(PREF_LABELS) as NotificationType[]).map((t) => (
-            <label key={t} className="flex min-h-14 cursor-pointer items-center justify-between gap-3 px-4 py-3">
+          {PREF_GROUPS.map((g) => (
+            <label key={g.key} className="flex min-h-14 cursor-pointer items-center justify-between gap-3 px-4 py-2.5">
               <span>
-                <span className="block">{PREF_LABELS[t].title}</span>
-                {PREF_LABELS[t].hint && <span className="block text-sm text-muted-foreground">{PREF_LABELS[t].hint}</span>}
+                <span className="block text-[1.0625rem]">{g.title}</span>
+                <span className="block text-sm text-muted-foreground">{g.hint}</span>
               </span>
-              <Switch checked={prefs[t]} onCheckedChange={(on) => setPref(t, on)} aria-label={PREF_LABELS[t].title} />
+              <Switch checked={g.types.some((t) => prefs[t])} onCheckedChange={(on) => setGroup(g.types, on)} aria-label={g.title} />
             </label>
           ))}
         </Group>
