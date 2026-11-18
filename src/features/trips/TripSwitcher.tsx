@@ -12,10 +12,10 @@ export function TripSwitcher({ trip, section }: { trip: Trip; section: string })
   const { data: trips } = useMyTrips(user.uid)
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="inline-flex h-11 max-w-full items-center gap-1 rounded-full px-2 text-[1.0625rem] font-semibold outline-none hover:bg-foreground/5 focus-visible:ring-[3px] focus-visible:ring-ring/50">
+      <DropdownMenuTrigger className="inline-flex h-11 max-w-full items-center gap-1.5 rounded-full px-1 text-[1.0625rem] font-semibold outline-none active:opacity-60 focus-visible:ring-[3px] focus-visible:ring-ring/50">
         <span aria-hidden>{trip.coverEmoji}</span>
         <span className="truncate">{trip.name}</span>
-        <ChevronDown className="size-4 shrink-0" aria-hidden />
+        <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         <span className="sr-only">Switch trip</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-h-[60dvh] w-64 overflow-y-auto">

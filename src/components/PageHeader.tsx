@@ -4,52 +4,52 @@ import { Link } from 'react-router'
 import { cn } from '@/lib/utils'
 
 /**
- * Sticky glass navigation bar (functional layer). Text is full-strength
- * foreground; actions are icon buttons without their own glass (no glass on glass).
+ * App-style header row: no separate bar. Back button, an optional small
+ * context title and icon actions sit in one row that scrolls with the
+ * page, directly above the screen's large title (iOS large-title layout).
  */
 export function PageHeader({
   title,
   backTo,
-  backLabel = 'Back',
+  backLabel,
   actions,
-  children,
   className,
 }: {
   title?: ReactNode
   backTo?: string
   backLabel?: string
   actions?: ReactNode
-  children?: ReactNode
   className?: string
 }) {
   return (
-    <header className={cn('glass sticky top-0 z-30 pt-safe', className)}>
-      <div className="mx-auto flex h-14 max-w-5xl items-center gap-1 px-2">
-        {backTo ? (
+    <header className={cn('pt-safe', className)}>
+      <div className="mx-auto flex h-12 max-w-2xl items-center gap-1 px-2">
+        {backTo && (
           <Link
             to={backTo}
-            className="inline-flex h-11 min-w-11 items-center gap-0.5 rounded-full pr-2 text-[1.0625rem] font-medium text-primary hover:bg-foreground/5"
+            className="inline-flex h-11 min-w-11 shrink-0 items-center rounded-full pr-1 text-[1.0625rem] text-primary active:opacity-60"
+            aria-label={backLabel ? `Back to ${backLabel}` : 'Back'}
           >
-            <ChevronLeft className="size-6" aria-hidden />
-            <span className="max-w-[8rem] truncate">{backLabel}</span>
+            <ChevronLeft className="size-7" aria-hidden />
+            {backLabel && !title && <span className="max-w-[9rem] truncate">{backLabel}</span>}
           </Link>
-        ) : (
-          <div className="w-2" />
         )}
-        <div className="min-w-0 flex-1 truncate text-[1.0625rem] font-semibold">{title}</div>
-        {actions && <div className="flex items-center gap-0.5">{actions}</div>}
+        <div className={cn('min-w-0 flex-1', !backTo && 'pl-2')}>{title}</div>
+        {actions && <div className="flex shrink-0 items-center">{actions}</div>}
       </div>
-      {children}
     </header>
   )
 }
 
-/** Large left-aligned title used at the top of top-level screens (content layer). */
-export function LargeTitle({ children, subtitle, className }: { children: ReactNode; subtitle?: ReactNode; className?: string }) {
+/** Large left-aligned title with an optional subtitle. */
+export function LargeTitle({ children, subtitle, className, action }: { children: ReactNode; subtitle?: ReactNode; className?: string; action?: ReactNode }) {
   return (
-    <div className={cn('px-4 pt-3 pb-2', className)}>
-      <h1 className="large-title">{children}</h1>
-      {subtitle && <p className="mt-1 text-[0.9375rem] text-muted-foreground">{subtitle}</p>}
+    <div className={cn('flex items-end gap-2 px-4 pt-1 pb-3', className)}>
+      <div className="min-w-0 flex-1">
+        <h1 className="large-title">{children}</h1>
+        {subtitle && <p className="mt-0.5 text-[0.9375rem] text-muted-foreground">{subtitle}</p>}
+      </div>
+      {action}
     </div>
   )
 }

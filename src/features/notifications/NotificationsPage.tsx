@@ -3,7 +3,6 @@ import { limit, orderBy, query, updateDoc, writeBatch, doc } from 'firebase/fire
 import { BellOff, CheckCheck, CircleAlert, CircleCheck, Clock, Send, UserPlus, CalendarDays } from 'lucide-react'
 import { PageHeader, LargeTitle } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useUser } from '@/features/auth/AuthProvider'
 import { db } from '@/lib/firebase'
@@ -53,9 +52,9 @@ export function NotificationsPage() {
         backLabel="Trips"
         actions={
           unread.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={markAll}>
-              <CheckCheck /> Mark all read
-            </Button>
+            <button type="button" onClick={markAll} className="inline-flex h-11 items-center gap-1.5 px-2 text-[1.0625rem] text-primary active:opacity-60">
+              <CheckCheck className="size-5" aria-hidden /> Read all
+            </button>
           )
         }
       />

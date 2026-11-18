@@ -20,6 +20,7 @@ export function TripLayout() {
   const members = useMembers(tripId)
   const pending = usePendingConfirmations(tripId, user.uid)
   const section = location.pathname.split('/')[3] ?? 'itinerary'
+  const onAll = location.pathname.endsWith('/itinerary/all')
 
   if (trip.loading) {
     return (
@@ -36,14 +37,14 @@ export function TripLayout() {
   return (
     <TripProvider trip={trip.data} members={members.data} me={user.uid}>
       <PageHeader
-        backTo="/"
-        backLabel="Trips"
+        backTo={onAll ? `/trips/${trip.data.id}/itinerary` : '/'}
+        backLabel={onAll ? 'Day view' : 'Trips'}
         title={<TripSwitcher trip={trip.data} section={section} />}
         actions={
           <>
             <BellButton />
             {trip.data.ownerId === user.uid && (
-              <Link to={`/trips/${trip.data.id}/settings`} className="inline-flex size-11 items-center justify-center rounded-full hover:bg-foreground/6" aria-label="Trip settings">
+              <Link to={`/trips/${trip.data.id}/settings`} className="inline-flex size-11 items-center justify-center rounded-full text-primary active:opacity-60" aria-label="Trip settings">
                 <Settings className="size-[1.375rem]" aria-hidden />
               </Link>
             )}

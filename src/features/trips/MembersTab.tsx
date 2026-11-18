@@ -39,7 +39,8 @@ export function MembersTab() {
   }, [params, setParams])
 
   return (
-    <main className="mx-auto max-w-2xl space-y-6 px-4 pt-4">
+    <main className="mx-auto max-w-2xl space-y-6 px-4">
+      <h1 className="large-title pt-1">Members</h1>
       <section aria-labelledby="members-h">
         <SectionTitle id="members-h">{members.length} {members.length === 1 ? 'member' : 'members'}</SectionTitle>
         <ul className="divide-y divide-border/70 overflow-hidden rounded-[1.25rem] bg-card ring-1 ring-border/70">

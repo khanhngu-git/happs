@@ -10,7 +10,7 @@ export function BellButton() {
   return (
     <Link
       to="/notifications"
-      className="relative inline-flex size-11 items-center justify-center rounded-full hover:bg-foreground/6"
+      className="relative inline-flex size-11 items-center justify-center rounded-full text-primary active:opacity-60"
       aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}
     >
       <Bell className="size-[1.375rem]" aria-hidden />
