@@ -14,6 +14,7 @@ import { TripSettingsPage } from '@/features/trips/TripSettingsPage'
 import { JoinPage } from '@/features/invites/JoinPage'
 import { Placeholder } from './Placeholder'
 import { ItineraryTab } from '@/features/itinerary/ItineraryTab'
+import { ExpensesTab } from '@/features/expenses/ExpensesTab'
 
 export const router = createBrowserRouter([
   {
@@ -41,7 +42,7 @@ export const router = createBrowserRouter([
                 children: [
                   { index: true, element: <Navigate to="itinerary" replace /> },
                   { path: 'itinerary', element: <ItineraryTab /> },
-                  { path: 'expenses', element: <Placeholder name="Expenses" /> },
+                  { path: 'expenses', element: <ExpensesTab /> },
                   { path: 'map', element: <Placeholder name="Map" /> },
                   { path: 'members', element: <MembersTab /> },
                   { path: 'settings', element: <TripSettingsPage /> },
