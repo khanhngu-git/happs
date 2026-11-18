@@ -108,6 +108,11 @@ export function ItineraryTab() {
         <Button variant="ghost" size="icon" onClick={() => step(1)} disabled={index === days.length - 1} aria-label="Next day" className="hidden sm:inline-flex">
           <ChevronRight className="size-5" />
         </Button>
+        {days.includes(today) && day !== today && (
+          <Button variant="secondary" size="sm" className="text-primary" onClick={() => setDay(today)}>
+            Today
+          </Button>
+        )}
         <Button asChild variant="ghost" size="sm" className="text-primary">
           <Link to="all" aria-label="All activities">
             <List /> All

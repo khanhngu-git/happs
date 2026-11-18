@@ -23,7 +23,7 @@ export function DayPicker({ days, selected, today, onSelect }: { days: string[];
             aria-selected={on}
             aria-label={`Day ${i + 1}, ${formatShortDate(d)}${isToday ? ', today' : ''}`}
             onClick={() => onSelect(d)}
-            className="flex w-11 shrink-0 snap-center flex-col items-center gap-1 rounded-full py-1 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            className="flex w-11 shrink-0 snap-center flex-col items-center gap-1 rounded-full pt-1 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
             <span className={cn('text-[0.6875rem] font-semibold', isToday ? 'text-primary' : 'text-muted-foreground')}>{WEEKDAY.format(utcDate(d))}</span>
             <span
@@ -34,6 +34,8 @@ export function DayPicker({ days, selected, today, onSelect }: { days: string[];
             >
               {utcDate(d).getUTCDate()}
             </span>
+            {/* The live day keeps a dot even when another day is selected. */}
+            <span className={cn('size-1.5 rounded-full', isToday ? 'bg-primary' : 'bg-transparent')} aria-hidden />
           </button>
         )
       })}
