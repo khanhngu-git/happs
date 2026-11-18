@@ -49,6 +49,12 @@ This uses real Firebase Auth for the `happss` project, so accounts are real; the
 
 Rebuild functions after editing them: `npm --prefix functions run build:watch` keeps the emulator up to date.
 
+**If the emulators exit with "An unexpected error has occurred"** (an intermittent firebase-tools crash), a stray Firestore process can keep port 8080 busy. Clear it and start again:
+
+```bash
+pkill -f cloud-firestore-emulator; npm run emulators:real-auth
+```
+
 ### Tests
 
 ```bash
