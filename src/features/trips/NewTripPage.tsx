@@ -1,0 +1,36 @@
+import { useNavigate } from 'react-router'
+import { toast } from 'sonner'
+import { PageHeader, LargeTitle } from '@/components/PageHeader'
+import { useAuth, useUser } from '@/features/auth/AuthProvider'
+import { TripForm } from './TripForm'
+import { createTrip } from './tripApi'
+
+export function NewTripPage() {
+  const user = useUser()
+  const { profile } = useAuth()
+  const navigate = useNavigate()
+  return (
+    <>
+      <PageHeader backTo="/" backLabel="Trips" />
+      <main className="mx-auto max-w-lg pb-10">
+        <LargeTitle subtitle="You can invite friends right after.">New trip</LargeTitle>
+        <div className="px-4">
+          <TripForm
+            defaultCurrency={profile?.defaultCurrency ?? 'AUD'}
+            submitLabel="Create trip"
+            onSubmit={async (input) => {
+              try {
+                const id = await createTrip(user, profile, input)
+                toast.success('Trip created')
+                navigate(`/trips/${id}/members?invite=1`, { replace: true })
+              } catch (err) {
+                console.error(err)
+                toast.error('Couldn’t create the trip. Try again.')
+              }
+            }}
+          />
+        </div>
+      </main>
+    </>
+  )
+}
