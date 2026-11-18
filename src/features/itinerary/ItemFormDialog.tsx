@@ -21,7 +21,10 @@ import { isDateString, isTimeString } from '@/shared/dates'
 import type { Location } from '@/shared/schemas'
 import { ITEM_TYPE_META } from './itemTypes'
 import { PlacePicker } from './PlacePicker'
-import { saveItem } from './itineraryApi'
+import { newItemId, saveItem } from './itineraryApi'
+import { removeByUrl, uploadItemPhoto } from '@/lib/uploads'
+import { ImageError } from '@/lib/images'
+import { ImagePlus, X } from 'lucide-react'
 
 const optTime = z.string().refine((v) => v === '' || isTimeString(v), 'Use a time like 09:30')
 const schema = z
@@ -63,6 +66,15 @@ export function ItemFormDialog({
     linkedExpense ? draftFromCost(linkedExpense) : emptyDraft({ currency: trip.baseCurrency, paidBy: me, memberIds: members.map((m) => m.id) }),
   )
   const [costError, setCostError] = useState<string | null>(null)
+  // Photo: a new File to upload, null to remove, undefined to keep what's there.
+  const [photo, setPhoto] = useState<File | null | undefined>(undefined)
+  const [preview, setPreview] = useState<string | null>(item?.photoURL ?? null)
+  useEffect(() => {
+    if (!photo) return
+    const url = URL.createObjectURL(photo)
+    setPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [photo])
   const [more, setMore] = useState(!!(item?.notes || item?.bookingUrl || item?.bookingRef || linkedExpense))
 
   const form = useForm<Values>({ resolver: zodResolver(schema) })
@@ -103,10 +115,18 @@ export function ItemFormDialog({
     }
     const stay = v.type === 'stay'
     try {
+      const id = item?.id ?? newItemId(trip.id)
+      let photoURL = item?.photoURL ?? null
+      if (photo) photoURL = await uploadItemPhoto(trip.id, id, photo, item?.photoURL)
+      else if (photo === null && item?.photoURL) {
+        await removeByUrl(item.photoURL)
+        photoURL = null
+      }
       await saveItem({
         trip,
         uid: me,
         existing: item,
+        id,
         nextOrder,
         cost,
         values: {
@@ -121,12 +141,14 @@ export function ItemFormDialog({
           notes: v.notes,
           bookingUrl: v.bookingUrl,
           bookingRef: v.bookingRef,
+          photoURL,
         },
       })
       toast.success(item ? 'Saved' : 'Added')
       onOpenChange(false)
     } catch (err) {
       if (err instanceof SharesLockedError) toast.warning(err.message, { duration: 8000 })
+      else if (err instanceof ImageError) toast.error(err.message)
       else {
         console.error(err)
         toast.error('Couldn’t save. Check your connection and try again.')
@@ -171,6 +193,41 @@ export function ItemFormDialog({
             <Label htmlFor="item-title">{type === 'stay' ? 'Where are you staying?' : 'What’s the plan?'}</Label>
             <Input id="item-title" placeholder={type === 'stay' ? 'Hotel, Airbnb…' : 'The Bund at night'} aria-invalid={!!errors.title} aria-describedby="item-title-error" {...form.register('title')} />
             <FieldError id="item-title-error" message={errors.title?.message} />
+          </div>
+
+          <div className="relative overflow-hidden rounded-2xl bg-foreground/[0.05]">
+            {preview ? (
+              <>
+                <img src={preview} alt="Activity photo" className="aspect-[16/9] w-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhoto(null)
+                    setPreview(null)
+                  }}
+                  className="absolute top-2 right-2 inline-flex size-11 items-center justify-center rounded-full bg-black/50 text-white"
+                  aria-label="Remove photo"
+                >
+                  <X className="size-5" />
+                </button>
+              </>
+            ) : (
+              <label className="flex min-h-14 w-full cursor-pointer items-center justify-center gap-2 text-[0.9375rem] font-medium text-primary">
+                <ImagePlus className="size-5" aria-hidden />
+                Add a photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  aria-label="Add a photo"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) setPhoto(f)
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+            )}
           </div>
 
           {type === 'stay' ? (

@@ -211,7 +211,7 @@ service cloud.firestore {
         function validItem(d) {
           return d.keys().hasAll(['type', 'title', 'date', 'createdBy'])
             && d.keys().hasOnly(['type', 'title', 'date', 'startTime', 'endTime', 'checkIn', 'checkOut', 'location',
-                                 'notes', 'bookingUrl', 'bookingRef', 'order', 'linkedExpenseId', 'createdBy',
+                                 'notes', 'bookingUrl', 'bookingRef', 'order', 'linkedExpenseId', 'photoURL', 'createdBy',
                                  'createdAt', 'updatedAt'])
             && d.type in ['activity', 'food', 'transport', 'stay', 'other']
             && isNonEmptyStr(d.title, 200)
@@ -225,7 +225,8 @@ service cloud.firestore {
             && optStr(d, 'bookingUrl', 2000)
             && optStr(d, 'bookingRef', 200)
             && (!('order' in d) || d.order is number)
-            && (d.get('linkedExpenseId', null) == null || d.linkedExpenseId is string);
+            && (d.get('linkedExpenseId', null) == null || d.linkedExpenseId is string)
+            && (d.get('photoURL', null) == null || isStr(d.photoURL, 2000));
         }
 
         allow read: if isMember(tripId);

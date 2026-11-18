@@ -64,3 +64,15 @@ describe('trip covers', () => {
     await assertFails(getBytes(ref(st(OUTSIDER), `trips/${TRIP}/cover-1.jpg`)))
   })
 })
+
+describe('activity photos', () => {
+  it('any member adds, replaces or removes an activity photo; outsiders cannot', async () => {
+    await assertSucceeds(put(MEMBER, `trips/${TRIP}/items/i1-1.jpg`))
+    await assertSucceeds(put(OWNER, `trips/${TRIP}/items/i2-1.jpg`))
+    await assertFails(put(OUTSIDER, `trips/${TRIP}/items/i3-1.jpg`))
+    await assertFails(put(MEMBER, `trips/${TRIP}/items/i4.txt`, 'text/plain'))
+    await assertFails(deleteObject(ref(st(OUTSIDER), `trips/${TRIP}/items/i1-1.jpg`)))
+    await assertSucceeds(deleteObject(ref(st(MEMBER), `trips/${TRIP}/items/i1-1.jpg`)))
+  })
+})
+

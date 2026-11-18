@@ -115,6 +115,7 @@ export const itemSchema = z.object({
   bookingRef: z.string().default(''),
   order: z.number().default(0),
   linkedExpenseId: z.string().nullable().default(null),
+  photoURL: z.string().nullable().default(null),
   createdBy: z.string(),
   createdAt: timestamp.optional(),
   updatedAt: timestamp.optional(),

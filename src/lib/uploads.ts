@@ -28,6 +28,11 @@ export async function uploadAvatar(uid: string, file: File, previousUrl?: string
   return upload(`users/${uid}/avatar-${Date.now()}.jpg`, blob, previousUrl)
 }
 
+export async function uploadItemPhoto(tripId: string, itemId: string, file: File, previousUrl?: string | null): Promise<string> {
+  const blob = await prepareImage(file, { maxSize: 1280, quality: 0.82 })
+  return upload(`trips/${tripId}/items/${itemId}-${Date.now()}.jpg`, blob, previousUrl)
+}
+
 export async function uploadTripCover(tripId: string, file: File, previousUrl?: string | null): Promise<string> {
   const blob = await prepareImage(file, { maxSize: 1600, quality: 0.82 })
   return upload(`trips/${tripId}/cover-${Date.now()}.jpg`, blob, previousUrl)

@@ -25,6 +25,13 @@ service firebase.storage {
       allow delete: if signedIn() && request.auth.uid == uid;
     }
 
+    // trips/{tripId}/items/{file} : activity photos; any member adds or changes them.
+    match /trips/{tripId}/items/{file} {
+      allow read: if signedIn() && request.auth.uid in trip(tripId).memberIds;
+      allow create, update: if signedIn() && request.auth.uid in trip(tripId).memberIds && isImage();
+      allow delete: if signedIn() && request.auth.uid in trip(tripId).memberIds;
+    }
+
     // trips/{tripId}/cover-*.jpg : members read, the owner changes the cover.
     match /trips/{tripId}/{file} {
       allow read: if signedIn() && request.auth.uid in trip(tripId).memberIds;

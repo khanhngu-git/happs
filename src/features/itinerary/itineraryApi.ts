@@ -2,6 +2,7 @@ import { collection, doc, getDoc, serverTimestamp, writeBatch } from 'firebase/f
 import { db } from '@/lib/firebase'
 import { refs, useLiveQuery, type Expense, type Item, type Trip } from '@/lib/firestore'
 import { reorder } from '@/shared/itinerary'
+import { removeByUrl } from '@/lib/uploads'
 import type { ItemType } from '@/shared/itinerary'
 import type { Location } from '@/shared/schemas'
 import { baseAmount, costToExpense, moneyChanged, sharesLocked, SharesLockedError, type ItemCost } from '@/features/expenses/expenseApi'
@@ -22,6 +23,7 @@ export interface ItemValues {
   notes: string
   bookingUrl: string
   bookingRef: string
+  photoURL: string | null
 }
 
 /**
@@ -30,9 +32,9 @@ export interface ItemValues {
  * - cost edited → update it, unless money has already moved (SharesLockedError)
  * - cost removed → delete it, with the same guard
  */
-export async function saveItem(opts: { trip: Trip; uid: string; existing: Item | null; values: ItemValues; cost: ItemCost | null; nextOrder: number }) {
+export async function saveItem(opts: { trip: Trip; uid: string; existing: Item | null; values: ItemValues; cost: ItemCost | null; nextOrder: number; id?: string }) {
   const { trip, uid, existing, values, cost } = opts
-  const itemRef = existing ? doc(db, 'trips', trip.id, 'items', existing.id) : doc(collection(db, 'trips', trip.id, 'items'))
+  const itemRef = existing ? doc(db, 'trips', trip.id, 'items', existing.id) : opts.id ? doc(db, 'trips', trip.id, 'items', opts.id) : doc(collection(db, 'trips', trip.id, 'items'))
   const batch = writeBatch(db)
   let linkedExpenseId = existing?.linkedExpenseId ?? null
 
@@ -75,6 +77,12 @@ export async function deleteItem(trip: Trip, item: Item) {
   }
   batch.delete(doc(db, 'trips', trip.id, 'items', item.id))
   await batch.commit()
+  if (item.photoURL) await removeByUrl(item.photoURL)
+}
+
+/** A fresh item id, so a photo can be uploaded before the item is first saved. */
+export function newItemId(tripId: string): string {
+  return doc(collection(db, 'trips', tripId, 'items')).id
 }
 
 /** Persist a drag-reorder of untimed ("Anytime") items. */
