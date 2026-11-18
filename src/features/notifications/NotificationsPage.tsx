@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router'
 import { limit, orderBy, query, updateDoc, writeBatch, doc } from 'firebase/firestore'
 import { BellOff, CheckCheck, CircleAlert, CircleCheck, Clock, Send, UserPlus, CalendarDays } from 'lucide-react'
-import { PageHeader, LargeTitle } from '@/components/PageHeader'
+import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useUser } from '@/features/auth/AuthProvider'
@@ -49,6 +49,7 @@ export function NotificationsPage() {
     <>
       <PageHeader
         backTo="/"
+        title={<h1 className="large-title">Notifications</h1>}
         backLabel="Trips"
         actions={
           unread.length > 0 && (
@@ -59,8 +60,7 @@ export function NotificationsPage() {
         }
       />
       <main className="mx-auto max-w-2xl pb-16">
-        <LargeTitle>Notifications</LargeTitle>
-        <div className="px-4">
+        <div className="px-4 pt-3">
           {loading ? (
             <div className="space-y-2" aria-busy>
               <Skeleton className="h-16 rounded-[1.25rem]" />

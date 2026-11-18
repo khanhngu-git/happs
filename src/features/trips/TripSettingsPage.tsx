@@ -3,7 +3,7 @@ import { Navigate, useNavigate } from 'react-router'
 import { limit, query } from 'firebase/firestore'
 import { Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { PageHeader, LargeTitle } from '@/components/PageHeader'
+import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { refs, useLiveQuery } from '@/lib/firestore'
@@ -21,9 +21,8 @@ export function TripSettingsPage() {
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-grouped">
-      <PageHeader backTo={`/trips/${trip.id}/itinerary`} backLabel={trip.name} />
-      <main className="mx-auto max-w-lg space-y-8 pb-16">
-        <LargeTitle>Trip settings</LargeTitle>
+      <PageHeader backTo={`/trips/${trip.id}/itinerary`} backLabel={trip.name} title={<h1 className="large-title">Trip settings</h1>} />
+      <main className="mx-auto max-w-lg space-y-8 pt-3 pb-16">
         <div className="px-4">
           <TripForm
             initial={trip}

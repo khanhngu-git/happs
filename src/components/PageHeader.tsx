@@ -27,7 +27,7 @@ export function PageHeader({
         {backTo && (
           <Link
             to={backTo}
-            className="inline-flex h-11 min-w-11 shrink-0 items-center rounded-full pr-1 text-[1.0625rem] text-primary active:opacity-60"
+            className={cn('inline-flex h-11 shrink-0 items-center rounded-full text-[1.0625rem] text-primary active:opacity-60', title ? 'w-9 -mr-1' : 'min-w-11 pr-1')}
             aria-label={backLabel ? `Back to ${backLabel}` : 'Back'}
           >
             <ChevronLeft className="size-7" aria-hidden />

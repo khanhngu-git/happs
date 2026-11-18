@@ -3,7 +3,7 @@ import { updateProfile } from 'firebase/auth'
 import { doc, updateDoc, writeBatch } from 'firebase/firestore'
 import { KeyRound, Loader2, LogOut, MessageSquare, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { PageHeader, LargeTitle } from '@/components/PageHeader'
+import { PageHeader } from '@/components/PageHeader'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { UserAvatar } from '@/components/UserAvatar'
 import { Button } from '@/components/ui/button'
@@ -103,9 +103,8 @@ function ProfileForm() {
 
   return (
     <>
-      <PageHeader backTo="/" backLabel="Trips" />
-      <main className="mx-auto max-w-lg space-y-7 px-4 pb-20">
-        <LargeTitle className="px-0">Profile</LargeTitle>
+      <PageHeader backTo="/" backLabel="Trips" title={<h1 className="large-title">Profile</h1>} />
+      <main className="mx-auto max-w-lg space-y-7 px-4 pt-3 pb-20">
 
         <Group title="You">
           <div className="space-y-4 p-4">

@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
-import { PageHeader, LargeTitle } from '@/components/PageHeader'
+import { PageHeader } from '@/components/PageHeader'
 import { useAuth, useUser } from '@/features/auth/AuthProvider'
 import { TripForm } from './TripForm'
 import { createTrip, updateTrip } from './tripApi'
@@ -12,9 +12,9 @@ export function NewTripPage() {
   const navigate = useNavigate()
   return (
     <>
-      <PageHeader backTo="/" backLabel="Trips" />
+      <PageHeader backTo="/" backLabel="Trips" title={<h1 className="large-title">New trip</h1>} />
       <main className="mx-auto max-w-lg pb-10">
-        <LargeTitle subtitle="You can invite friends right after.">New trip</LargeTitle>
+        <p className="px-4 pb-4 text-[0.9375rem] text-muted-foreground">You can invite friends right after.</p>
         <div className="px-4">
           <TripForm
             defaultCurrency={profile?.defaultCurrency ?? 'AUD'}
