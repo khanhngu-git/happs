@@ -18,6 +18,7 @@ pubsub-debug.log
 functions/lib
 functions/node_modules
 emulator-data/
+emulator-data-real/
 # Never commit service account keys
 *adminsdk*.json
 service-account*.json

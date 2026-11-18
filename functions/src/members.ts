@@ -1,6 +1,6 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { FieldValue } from 'firebase-admin/firestore'
-import { db, adminAuth } from './admin'
+import { db, adminAuth, deleteFolder } from './admin'
 import { parseInput, requireAuth } from './util'
 import { removeMemberInput } from '@shared/schemas'
 
@@ -87,6 +87,7 @@ export const deleteAccount = onCall(async (req) => {
     await batch.commit()
   }
   await db.recursiveDelete(db.doc(`users/${uid}`))
+  await deleteFolder(`users/${uid}/`)
   await adminAuth.deleteUser(uid)
   return { deleted: true }
 })

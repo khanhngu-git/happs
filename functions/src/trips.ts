@@ -1,5 +1,5 @@
 import { onDocumentDeleted, onDocumentWrittenWithAuthContext } from 'firebase-functions/v2/firestore'
-import { db } from './admin'
+import { db, deleteFolder } from './admin'
 import { notify } from './notify'
 import { memberName } from './util'
 import { formatShortDate } from '@shared/dates'
@@ -7,6 +7,7 @@ import { formatShortDate } from '@shared/dates'
 /** Deleting a trip removes all of its subcollections. */
 export const onTripDeleted = onDocumentDeleted('trips/{tripId}', async (event) => {
   await db.recursiveDelete(db.doc(`trips/${event.params.tripId}`))
+  await deleteFolder(`trips/${event.params.tripId}/`)
 })
 
 /** Fields whose change is worth telling others about (not reordering etc). */
