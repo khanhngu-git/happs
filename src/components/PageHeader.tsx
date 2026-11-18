@@ -34,7 +34,7 @@ export function PageHeader({
             {backLabel && !title && <span className="max-w-[9rem] truncate">{backLabel}</span>}
           </Link>
         )}
-        <div className={cn('min-w-0 flex-1', !backTo && 'pl-2')}>{title}</div>
+        <div className={cn('flex min-w-0 flex-1 items-center', !backTo && 'pl-2')}>{title}</div>
         {actions && <div className="flex shrink-0 items-center">{actions}</div>}
       </div>
     </header>
@@ -44,7 +44,7 @@ export function PageHeader({
 /** Large left-aligned title with an optional subtitle. */
 export function LargeTitle({ children, subtitle, className, action }: { children: ReactNode; subtitle?: ReactNode; className?: string; action?: ReactNode }) {
   return (
-    <div className={cn('flex items-end gap-2 px-4 pt-1 pb-3', className)}>
+    <div className={cn('flex items-center gap-2 px-4 pt-1 pb-3', className)}>
       <div className="min-w-0 flex-1">
         <h1 className="large-title">{children}</h1>
         {subtitle && <p className="mt-0.5 text-[0.9375rem] text-muted-foreground">{subtitle}</p>}

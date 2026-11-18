@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { Luggage } from 'lucide-react'
-import { PageHeader, LargeTitle } from '@/components/PageHeader'
+import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
 import { Fab } from '@/components/Fab'
@@ -38,19 +38,20 @@ export function HomePage() {
 
   return (
     <>
+      {/* Same header row as every other screen, so the icons never move between pages. */}
       <PageHeader
+        title={<h1 className="large-title">Trips</h1>}
         actions={
           <>
             <BellButton />
-            <Link to="/profile" className="inline-flex size-11 items-center justify-center rounded-full hover:bg-foreground/6" aria-label="Profile and settings">
+            <Link to="/profile" className="inline-flex size-11 items-center justify-center rounded-full active:opacity-60" aria-label="Profile and settings">
               <UserAvatar name={profile?.displayName ?? user.displayName} photoURL={profile?.photoURL ?? user.photoURL} className="size-8" />
             </Link>
           </>
         }
       />
       <main className="mx-auto max-w-2xl pb-28">
-        <LargeTitle>Trips</LargeTitle>
-        <div className="space-y-8 px-4 pt-2">
+        <div className="space-y-8 px-4 pt-3">
           <VerifyEmailBanner />
           <InstallPrompt />
           {loading ? (
