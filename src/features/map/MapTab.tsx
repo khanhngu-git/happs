@@ -5,7 +5,6 @@ import { EmptyState } from '@/components/EmptyState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useTrip } from '@/features/trips/TripContext'
 import { useItems } from '@/features/itinerary/itineraryApi'
-import { useExpenses } from '@/features/expenses/expenseApi'
 import { ITEM_TYPE_META } from '@/features/itinerary/itemTypes'
 import { ItemTypeIcon } from '@/features/itinerary/ItemTypeIcon'
 import { timeLabel } from '@/features/itinerary/format'
@@ -15,6 +14,7 @@ import { formatShortDate, tripDays } from '@/shared/dates'
 import { ITEM_TYPES, type ItemType } from '@/shared/itinerary'
 import { mapStops } from './mapData'
 import { StopCard } from './StopCard'
+import { StopStrip } from './StopStrip'
 
 const TripMap = lazy(() => import('./TripMap').then((m) => ({ default: m.TripMap })))
 
@@ -37,7 +37,6 @@ export function MapTab() {
   const { trip } = useTrip()
   const [params, setParams] = useSearchParams()
   const { data: items, loading } = useItems(trip.id)
-  const { data: expenses } = useExpenses(trip.id)
   const days = useMemo(() => tripDays(trip.startDate, trip.endDate), [trip.startDate, trip.endDate])
   const day = days.includes(params.get('day') ?? '') ? params.get('day') : null
   // One type at a time (or all), like the day filter.
@@ -47,7 +46,6 @@ export function MapTab() {
   const stops = useMemo(() => mapStops(items, day, types), [items, day, types])
   const selectedId = params.get('item')
   const selected = stops.find((s) => s.item.id === selectedId) ?? null
-  const expensesById = useMemo(() => new Map(expenses.map((e) => [e.id, e])), [expenses])
 
   const set = (k: string, v: string | null) =>
     setParams(
@@ -131,10 +129,18 @@ export function MapTab() {
           </div>
         )}
         <div className="pointer-events-none absolute inset-x-3 top-3">{filters}</div>
-        {selected && (
+        {selected ? (
           <div className="pointer-events-none absolute inset-x-3 bottom-[calc(6rem+env(safe-area-inset-bottom))] md:bottom-4 md:left-auto md:w-96">
-            <StopCard stop={selected} expense={selected.item.linkedExpenseId ? expensesById.get(selected.item.linkedExpenseId) : undefined} onClose={() => set('item', null)} />
+            <StopCard stop={selected} onClose={() => set('item', null)} />
           </div>
+        ) : (
+          hasMaps &&
+          day &&
+          stops.some((s) => s.item.type !== 'stay') && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] md:hidden">
+              <StopStrip stops={stops} onSelect={(id) => set('item', id)} />
+            </div>
+          )
         )}
       </div>
     </div>

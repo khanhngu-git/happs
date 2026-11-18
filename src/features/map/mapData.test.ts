@@ -30,7 +30,7 @@ describe('mapStops', () => {
   it('skips items without coordinates', () => {
     expect(mapStops([item('a', { location: null }), item('b')], null, ALL).map((s) => s.item.id)).toEqual(['b'])
   })
-  it('numbers a single day in itinerary order, excluding stays', () => {
+  it('numbers only timed stops, in time order; anytime plans and stays are unnumbered', () => {
     const items = [
       item('dinner', { startTime: '19:00' }),
       item('hotel', { type: 'stay', date: '2026-12-05', checkIn: { date: '2026-12-05', time: null }, checkOut: { date: '2026-12-08', time: null } }),
@@ -40,10 +40,10 @@ describe('mapStops', () => {
     ]
     const stops = mapStops(items, '2026-12-06', ALL)
     expect(stops.map((s) => [s.item.id, s.number])).toEqual([
+      ['museum', 1],
+      ['dinner', 2],
       ['hotel', null],
-      ['walk', 1],
-      ['museum', 2],
-      ['dinner', 3],
+      ['walk', null],
     ])
   })
   it('filters by type and leaves numbers off for all days', () => {

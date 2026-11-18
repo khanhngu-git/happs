@@ -12,33 +12,64 @@ function FitBounds({ stops }: { stops: MapStop[] }) {
   const key = stops.map((s) => s.item.id).join()
   useEffect(() => {
     if (!map || stops.length === 0) return
-    if (stops.length === 1) {
-      map.panTo({ lat: stops[0]!.lat, lng: stops[0]!.lng })
-      map.setZoom(15)
-      return
+    const fit = () => {
+      if (stops.length === 1) {
+        map.panTo({ lat: stops[0]!.lat, lng: stops[0]!.lng })
+        map.setZoom(15)
+        return
+      }
+      const b = new google.maps.LatLngBounds()
+      stops.forEach((s) => b.extend({ lat: s.lat, lng: s.lng }))
+      map.fitBounds(b, { top: 130, bottom: 230, left: 48, right: 48 })
     }
-    const b = new google.maps.LatLngBounds()
-    stops.forEach((s) => b.extend({ lat: s.lat, lng: s.lng }))
-    map.fitBounds(b, { top: 140, bottom: 200, left: 40, right: 40 })
+    fit()
+    // The first fit can run before the map has its final size; fit again once it settles.
+    const once = google.maps.event.addListenerOnce(map, 'idle', fit)
+    return () => once.remove()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, key])
   return null
 }
 
-/** Straight line through a day's numbered stops (no routing API in v1). */
+const ROUTE = '#0f766e'
+
+/**
+ * The day's timed stops joined in order by a thin solid line with a white
+ * casing (readable on any map style). The numbers carry the order, so no
+ * arrows. Straight segments: no routing API in v1.
+ */
 function DayLine({ stops }: { stops: MapStop[] }) {
   const map = useMap()
   useEffect(() => {
     const path = stops.filter((s) => s.number !== null).map((s) => ({ lat: s.lat, lng: s.lng }))
     if (!map || path.length < 2) return
+    const casing = new google.maps.Polyline({ map, path, strokeColor: '#ffffff', strokeOpacity: 0.9, strokeWeight: 6, zIndex: 1, clickable: false })
     const line = new google.maps.Polyline({
       map,
       path,
-      strokeOpacity: 0,
-      icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.9, strokeColor: '#0f766e', scale: 3 }, offset: '0', repeat: '14px' }],
+      strokeColor: ROUTE,
+      strokeOpacity: 0.9,
+      strokeWeight: 3,
+      zIndex: 2,
+      clickable: false,
     })
-    return () => line.setMap(null)
+    return () => {
+      casing.setMap(null)
+      line.setMap(null)
+    }
   }, [map, stops])
+  return null
+}
+
+/** Keep the selected stop in view. */
+function PanToSelected({ stop }: { stop: MapStop | null }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!map || !stop) return
+    map.panTo({ lat: stop.lat, lng: stop.lng })
+    // Close stops overlap when zoomed out; zoom in so the chosen one is clear.
+    if ((map.getZoom() ?? 0) < 15) map.setZoom(15)
+  }, [map, stop])
   return null
 }
 
@@ -77,14 +108,28 @@ export function TripMap({ stops, selectedId, onSelect }: { stops: MapStop[]; sel
           const meta = ITEM_TYPE_META[s.item.type]
           const Icon = meta.icon
           const selected = s.item.id === selectedId
+          const dimmed = !!selectedId && !selected
+          const size = selected ? 46 : s.number !== null ? 36 : 32
           return (
-            <AdvancedMarker key={s.item.id} position={{ lat: s.lat, lng: s.lng }} title={s.item.title} onClick={() => onSelect(s.item.id)} zIndex={selected ? 1000 : s.item.type === 'stay' ? 10 : 100}>
+            <AdvancedMarker
+              key={s.item.id}
+              position={{ lat: s.lat, lng: s.lng }}
+              title={s.number !== null ? `${s.number}. ${s.item.title}` : s.item.title}
+              onClick={() => onSelect(s.item.id)}
+              zIndex={selected ? 1000 : s.number !== null ? 500 - s.number : 10}
+            >
               <div
-                className="flex items-center justify-center rounded-full border-2 border-white text-white shadow-lg transition-transform"
-                style={{ background: meta.hex, width: selected ? 44 : 36, height: selected ? 44 : 36 }}
+                className="flex items-center justify-center rounded-full border-[3px] border-white text-white shadow-[0_2px_8px_rgb(0_0_0/0.35)] transition-all"
+                style={{ background: meta.hex, width: size, height: size, opacity: dimmed ? 0.45 : 1 }}
                 aria-hidden
               >
-                {s.item.type === 'stay' ? <BedDouble className="size-5" /> : s.number !== null ? <span className="text-sm font-bold">{s.number}</span> : <Icon className="size-4.5" />}
+                {s.item.type === 'stay' ? (
+                  <BedDouble className="size-4.5" />
+                ) : s.number !== null ? (
+                  <span className={selected ? 'text-lg font-extrabold' : 'text-[0.9375rem] font-extrabold'}>{s.number}</span>
+                ) : (
+                  <Icon className="size-4" />
+                )}
               </div>
             </AdvancedMarker>
           )
@@ -96,8 +141,9 @@ export function TripMap({ stops, selectedId, onSelect }: { stops: MapStop[]; sel
         )}
         <FitBounds stops={stops} />
         <DayLine stops={stops} />
+        <PanToSelected stop={stops.find((s) => s.item.id === selectedId) ?? null} />
       </Map>
-      <div className="pointer-events-none absolute right-3 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] md:bottom-4">
+      <div className="pointer-events-none absolute right-3 bottom-[calc(13rem+env(safe-area-inset-bottom))] md:bottom-4">
         <LocateMe onLocated={setMe} />
       </div>
     </div>

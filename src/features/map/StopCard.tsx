@@ -2,15 +2,13 @@ import { useNavigate } from 'react-router'
 import { CalendarDays, ExternalLink, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTrip } from '@/features/trips/TripContext'
-import type { Expense } from '@/lib/firestore'
-import { formatMoney } from '@/shared/money'
 import { formatShortDate } from '@/shared/dates'
 import { googleMapsUrl, timeLabel } from '@/features/itinerary/format'
 import { ItemTypeIcon } from '@/features/itinerary/ItemTypeIcon'
 import type { MapStop } from './mapData'
 
 /** Bottom card for the tapped marker (functional layer, floats over the map). */
-export function StopCard({ stop, expense, onClose }: { stop: MapStop; expense?: Expense; onClose(): void }) {
+export function StopCard({ stop, onClose }: { stop: MapStop; onClose(): void }) {
   const { trip } = useTrip()
   const navigate = useNavigate()
   const { item } = stop
@@ -25,7 +23,6 @@ export function StopCard({ stop, expense, onClose }: { stop: MapStop; expense?: 
           </p>
           <p className="text-sm">
             {formatShortDate(item.date)} · {timeLabel(item)}
-            {expense && <> · {formatMoney(expense.amountMinor, expense.currency)}</>}
           </p>
           {item.location?.address && <p className="truncate text-sm">{item.location.address}</p>}
         </div>
