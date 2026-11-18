@@ -1,26 +1,23 @@
 import { createBrowserRouter, Navigate } from 'react-router'
 import { RootLayout } from './RootLayout'
 import { AppLayout } from './AppLayout'
+import { NotFound } from './NotFound'
 import { RedirectIfSignedIn, RequireAuth } from '@/features/auth/RequireAuth'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { SignupPage } from '@/features/auth/SignupPage'
 import { ResetPage } from '@/features/auth/ResetPage'
-import { NotFound } from './NotFound'
 import { HomePage } from '@/features/trips/HomePage'
-import { NewTripPage } from '@/features/trips/NewTripPage'
-import { TripLayout } from '@/features/trips/TripLayout'
-import { MembersTab } from '@/features/trips/MembersTab'
-import { TripSettingsPage } from '@/features/trips/TripSettingsPage'
-import { JoinPage } from '@/features/invites/JoinPage'
-import { ItineraryTab } from '@/features/itinerary/ItineraryTab'
-import { ExpensesTab } from '@/features/expenses/ExpensesTab'
-import { MapTab } from '@/features/map/MapTab'
-import { NotificationsPage } from '@/features/notifications/NotificationsPage'
-import { ProfilePage } from '@/features/profile/ProfilePage'
+import { FullScreenLoader } from '@/components/FullScreenLoader'
+
+/** Route-level code splitting: each screen loads on first visit. */
+const lazy =
+  <K extends string>(load: () => Promise<Record<K, React.ComponentType>>, name: K) =>
+  async () => ({ Component: (await load())[name] })
 
 export const router = createBrowserRouter([
   {
     element: <RootLayout />,
+    hydrateFallbackElement: <FullScreenLoader />,
     children: [
       {
         element: <RedirectIfSignedIn />,
@@ -37,25 +34,25 @@ export const router = createBrowserRouter([
             element: <AppLayout />,
             children: [
               { index: true, element: <HomePage /> },
-              { path: 'trips/new', element: <NewTripPage /> },
-              { path: 'notifications', element: <NotificationsPage /> },
-              { path: 'profile', element: <ProfilePage /> },
+              { path: 'trips/new', lazy: lazy(() => import('@/features/trips/NewTripPage'), 'NewTripPage') },
+              { path: 'notifications', lazy: lazy(() => import('@/features/notifications/NotificationsPage'), 'NotificationsPage') },
+              { path: 'profile', lazy: lazy(() => import('@/features/profile/ProfilePage'), 'ProfilePage') },
               {
                 path: 'trips/:tripId',
-                element: <TripLayout />,
+                lazy: lazy(() => import('@/features/trips/TripLayout'), 'TripLayout'),
                 children: [
                   { index: true, element: <Navigate to="itinerary" replace /> },
-                  { path: 'itinerary', element: <ItineraryTab /> },
-                  { path: 'expenses', element: <ExpensesTab /> },
-                  { path: 'map', element: <MapTab /> },
-                  { path: 'members', element: <MembersTab /> },
-                  { path: 'settings', element: <TripSettingsPage /> },
+                  { path: 'itinerary', lazy: lazy(() => import('@/features/itinerary/ItineraryTab'), 'ItineraryTab') },
+                  { path: 'expenses', lazy: lazy(() => import('@/features/expenses/ExpensesTab'), 'ExpensesTab') },
+                  { path: 'map', lazy: lazy(() => import('@/features/map/MapTab'), 'MapTab') },
+                  { path: 'members', lazy: lazy(() => import('@/features/trips/MembersTab'), 'MembersTab') },
+                  { path: 'settings', lazy: lazy(() => import('@/features/trips/TripSettingsPage'), 'TripSettingsPage') },
                 ],
               },
             ],
           },
           // Invite links: signed-out visitors log in first, then come back here.
-          { path: 'join/:code', element: <JoinPage /> },
+          { path: 'join/:code', lazy: lazy(() => import('@/features/invites/JoinPage'), 'JoinPage') },
           // Unknown paths are guarded too, so deep links bounce through login.
           { path: '*', element: <NotFound /> },
         ],

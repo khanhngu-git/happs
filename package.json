@@ -18,7 +18,8 @@
     "test:rules": "sh scripts/with-java.sh firebase emulators:exec --only firestore --project demo-happs-rules \"vitest run --config vitest.rules.config.ts\"",
     "test:e2e": "playwright test",
     "assets": "pwa-assets-generator",
-    "test:rules:dev": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 vitest run --config vitest.rules.config.ts"
+    "test:rules:dev": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 vitest run --config vitest.rules.config.ts",
+    "test:e2e:ci": "sh scripts/with-java.sh firebase emulators:exec --project demo-happs \"playwright test\""
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
