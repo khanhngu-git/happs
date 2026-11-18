@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "dev:all": "concurrently -k -n emu,web -c blue,green \"npm run emulators\" \"vite\"",
-    "emulators": "sh scripts/with-java.sh firebase emulators:start --project demo-happs --import=./emulator-data --export-on-exit=./emulator-data",
-    "emulators:fresh": "sh scripts/with-java.sh firebase emulators:start --project demo-happs",
+    "emulators": "mkdir -p .emulator-tmp/dev && TMPDIR=\"$PWD/.emulator-tmp/dev\" sh scripts/with-java.sh firebase emulators:start --project demo-happs --import=./emulator-data --export-on-exit=./emulator-data",
+    "emulators:fresh": "mkdir -p .emulator-tmp/dev && TMPDIR=\"$PWD/.emulator-tmp/dev\" sh scripts/with-java.sh firebase emulators:start --project demo-happs",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --noEmit && npm --prefix functions run typecheck",
     "preview": "vite preview",
@@ -15,10 +15,10 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:rules": "sh scripts/with-java.sh firebase emulators:exec --config firebase.rules-test.json --only firestore,storage --project demo-happs-rules \"vitest run --config vitest.rules.config.ts\"",
-    "test:e2e": "npm --prefix functions run build && sh scripts/with-java.sh firebase emulators:exec --config firebase.e2e.json --only auth,firestore,functions,storage --project demo-happs \"playwright test\"",
+    "test:rules": "mkdir -p .emulator-tmp/rules && TMPDIR=\"$PWD/.emulator-tmp/rules\" sh scripts/with-java.sh firebase emulators:exec --config firebase.rules-test.json --only firestore,storage --project demo-happs-rules \"vitest run --config vitest.rules.config.ts\"",
+    "test:e2e": "npm --prefix functions run build && mkdir -p .emulator-tmp/e2e && TMPDIR=\"$PWD/.emulator-tmp/e2e\" sh scripts/with-java.sh firebase emulators:exec --config firebase.e2e.json --only auth,firestore,functions,storage --project demo-happs \"playwright test\"",
     "assets": "pwa-assets-generator",
-    "emulators:real-auth": "sh scripts/with-java.sh firebase emulators:start --project happss --only firestore,functions,storage --import=./emulator-data-real --export-on-exit=./emulator-data-real"
+    "emulators:real-auth": "mkdir -p .emulator-tmp/dev-real && TMPDIR=\"$PWD/.emulator-tmp/dev-real\" sh scripts/with-java.sh firebase emulators:start --project happss --only firestore,functions,storage --import=./emulator-data-real --export-on-exit=./emulator-data-real"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

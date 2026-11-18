@@ -73,3 +73,4 @@ The `liquid-glass` skill (github.com/heyparsadev/liquid-glass-skill) targets Swi
 
 ## Test isolation
 - `npm run test:rules` and `npm run test:e2e` start their own emulators on separate ports (`firebase.rules-test.json`, `firebase.e2e.json`). E2E runs its own dev server on :5174 with the Auth emulator forced on. Tests can't create real accounts, even when your dev setup uses real Google sign-in, and they don't disturb your dev emulators.
+- **Per-suite emulator temp dirs.** The Storage emulator stores blobs in `$TMPDIR/firebase/storage/blobs` and removes the folder on shutdown. Dev, rules-test and e2e suites shared it, so a finished test run deleted the dev suite's blob folder, and the next upload crashed it (`ENOENT` in `persistence.appendBytes`). Every npm emulator script now sets its own `TMPDIR` under `.emulator-tmp/`.

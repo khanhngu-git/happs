@@ -49,7 +49,9 @@ This uses real Firebase Auth for the `happss` project, so accounts are real; the
 
 Rebuild functions after editing them: `npm --prefix functions run build:watch` keeps the emulator up to date.
 
-**If the emulators exit with "An unexpected error has occurred"** (an intermittent firebase-tools crash), a stray Firestore process can keep port 8080 busy. Clear it and start again:
+Each emulator suite (dev, rules tests, e2e) runs with its own `TMPDIR` under `.emulator-tmp/`. The Storage emulator keeps uploads in `$TMPDIR/firebase` and deletes that folder when it exits. With a shared folder, finishing a test run wiped the dev emulator's files, and the next photo upload crashed it.
+
+**If the emulators exit with "An unexpected error has occurred"**, a stray Firestore process can keep port 8080 busy. Clear it and start again:
 
 ```bash
 pkill -f cloud-firestore-emulator; npm run emulators:real-auth

@@ -19,6 +19,7 @@ functions/lib
 functions/node_modules
 emulator-data/
 emulator-data-real/
+.emulator-tmp/
 # Never commit service account keys
 *adminsdk*.json
 service-account*.json
