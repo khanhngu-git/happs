@@ -55,10 +55,7 @@ function PlacesAutocomplete({ id, value, onChange }: Props) {
   const token = useRef<google.maps.places.AutocompleteSessionToken | null>(null)
 
   useEffect(() => {
-    if (!places || text.trim().length < 2) {
-      setSuggestions([])
-      return
-    }
+    if (!places || text.trim().length < 2) return
     token.current ??= new places.AutocompleteSessionToken()
     let cancelled = false
     const t = setTimeout(async () => {
@@ -92,6 +89,9 @@ function PlacesAutocomplete({ id, value, onChange }: Props) {
     onChange({ placeId: place.id, name: place.displayName ?? s.main, address: place.formattedAddress ?? s.secondary, lat: place.location?.lat() ?? null, lng: place.location?.lng() ?? null })
   }
 
+  // Short queries show nothing rather than stale results.
+  const shown = text.trim().length < 2 ? [] : suggestions
+
   if (value) {
     return (
       <div className="space-y-2">
@@ -117,7 +117,7 @@ function PlacesAutocomplete({ id, value, onChange }: Props) {
       <Input
         id={id}
         role="combobox"
-        aria-expanded={open && suggestions.length > 0}
+        aria-expanded={open && shown.length > 0}
         aria-controls={listId}
         aria-autocomplete="list"
         aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
@@ -130,17 +130,17 @@ function PlacesAutocomplete({ id, value, onChange }: Props) {
         }}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => {
-          if (e.key === 'ArrowDown') setActive((a) => Math.min(a + 1, suggestions.length - 1))
+          if (e.key === 'ArrowDown') setActive((a) => Math.min(a + 1, shown.length - 1))
           else if (e.key === 'ArrowUp') setActive((a) => Math.max(a - 1, 0))
-          else if (e.key === 'Enter' && active >= 0 && suggestions[active]) {
+          else if (e.key === 'Enter' && active >= 0 && shown[active]) {
             e.preventDefault()
-            void pick(suggestions[active])
+            void pick(shown[active])
           }
         }}
       />
-      {open && suggestions.length > 0 && (
+      {open && shown.length > 0 && (
         <ul id={listId} role="listbox" className="glass-strong absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-2xl p-1">
-          {suggestions.map((s, i) => (
+          {shown.map((s, i) => (
             <li
               key={s.placeId}
               id={`${listId}-${i}`}

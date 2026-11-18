@@ -10,14 +10,10 @@ import { SharesLockedError } from '@/features/expenses/expenseApi'
 import type { Expense, Item } from '@/lib/firestore'
 import { formatMoney } from '@/shared/money'
 import { formatLongDate } from '@/shared/dates'
-import { ItemTypeIcon } from './itemTypes'
-import { timeLabel } from './ItemCard'
+import { ItemTypeIcon } from './ItemTypeIcon'
+import { googleMapsUrl, timeLabel } from './format'
 import { deleteItem } from './itineraryApi'
 
-export function googleMapsUrl(loc: NonNullable<Item['location']>): string {
-  const q = encodeURIComponent(loc.lat !== null && loc.lng !== null ? `${loc.lat},${loc.lng}` : `${loc.name} ${loc.address}`)
-  return `https://www.google.com/maps/search/?api=1&query=${q}${loc.placeId ? `&query_place_id=${encodeURIComponent(loc.placeId)}` : ''}`
-}
 
 export function ItemSheet({ item, expense, onOpenChange, onEdit }: { item: Item | null; expense?: Expense; onOpenChange(o: boolean): void; onEdit(): void }) {
   const { trip, me, isOwner, nameOf } = useTrip()

@@ -3,14 +3,10 @@ import { ExternalLink, MapPin } from 'lucide-react'
 import type { Expense, Item } from '@/lib/firestore'
 import { cn } from '@/lib/utils'
 import { formatMoney } from '@/shared/money'
-import { formatTime } from '@/shared/dates'
-import { ITEM_TYPE_META, ItemTypeIcon } from './itemTypes'
+import { ItemTypeIcon } from './ItemTypeIcon'
+import { ITEM_TYPE_META } from './itemTypes'
+import { timeLabel } from './format'
 
-export function timeLabel(item: Item): string {
-  if (item.type === 'stay') return item.checkIn?.time ? `Check in ${formatTime(item.checkIn.time)}` : 'Check in'
-  if (!item.startTime) return 'Anytime'
-  return item.endTime ? `${formatTime(item.startTime)} – ${formatTime(item.endTime)}` : formatTime(item.startTime)
-}
 
 /** A plan in the timeline (content layer: solid card). */
 export const ItemCard = forwardRef<HTMLDivElement, { item: Item; expense?: Expense; onOpen(): void; handle?: ReactNode; className?: string; style?: React.CSSProperties }>(

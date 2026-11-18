@@ -13,12 +13,3 @@ export const ITEM_TYPE_META: Record<ItemType, { label: string; icon: LucideIcon;
   other: { label: 'Other', icon: Sparkles, color: 'text-slate-600 dark:text-slate-300', chip: 'bg-slate-500/14', hex: '#475569' },
 }
 
-export function ItemTypeIcon({ type, className = 'size-10' }: { type: ItemType; className?: string }) {
-  const meta = ITEM_TYPE_META[type]
-  const Icon = meta.icon
-  return (
-    <span className={`inline-flex shrink-0 items-center justify-center rounded-full ${meta.chip} ${meta.color} ${className}`} aria-hidden>
-      <Icon className="size-[45%]" />
-    </span>
-  )
-}

@@ -1,10 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { cn } from '@/lib/utils'
+import { cn, initials } from '@/lib/utils'
 
-export function initials(name: string | null | undefined): string {
-  const parts = (name ?? '?').trim().split(/\s+/).filter(Boolean)
-  return ((parts[0]?.[0] ?? '?') + (parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : '')).toUpperCase()
-}
 
 export function UserAvatar({ name, photoURL, className }: { name?: string | null; photoURL?: string | null; className?: string }) {
   return (
