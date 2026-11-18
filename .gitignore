@@ -1,0 +1,23 @@
+node_modules
+dist
+dev-dist
+*.local
+.env
+.env.*
+!.env.example
+coverage
+playwright-report
+test-results
+.DS_Store
+*.log
+firebase-debug*.log
+firestore-debug.log
+ui-debug.log
+pubsub-debug.log
+.firebase/
+functions/lib
+functions/node_modules
+emulator-data/
+# Never commit service account keys
+*adminsdk*.json
+service-account*.json

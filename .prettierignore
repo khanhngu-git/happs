@@ -1,0 +1,6 @@
+dist
+dev-dist
+functions/lib
+node_modules
+package-lock.json
+*.md
