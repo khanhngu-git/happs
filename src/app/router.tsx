@@ -15,6 +15,8 @@ import { JoinPage } from '@/features/invites/JoinPage'
 import { Placeholder } from './Placeholder'
 import { ItineraryTab } from '@/features/itinerary/ItineraryTab'
 import { ExpensesTab } from '@/features/expenses/ExpensesTab'
+import { NotificationsPage } from '@/features/notifications/NotificationsPage'
+import { ProfilePage } from '@/features/profile/ProfilePage'
 
 export const router = createBrowserRouter([
   {
@@ -36,6 +38,8 @@ export const router = createBrowserRouter([
             children: [
               { index: true, element: <HomePage /> },
               { path: 'trips/new', element: <NewTripPage /> },
+              { path: 'notifications', element: <NotificationsPage /> },
+              { path: 'profile', element: <ProfilePage /> },
               {
                 path: 'trips/:tripId',
                 element: <TripLayout />,
