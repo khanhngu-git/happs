@@ -112,3 +112,16 @@ export const COMMON_CURRENCIES = [
   'AUD', 'USD', 'EUR', 'GBP', 'NZD', 'CAD', 'CNY', 'JPY', 'SGD', 'HKD', 'KRW', 'THB', 'VND', 'IDR', 'MYR',
   'PHP', 'INR', 'CHF', 'SEK', 'NOK', 'DKK', 'MXN', 'BRL', 'ZAR', 'AED', 'TWD',
 ] as const
+
+const REGION_CURRENCY: Record<string, string> = {
+  AU: 'AUD', US: 'USD', GB: 'GBP', NZ: 'NZD', CA: 'CAD', CN: 'CNY', JP: 'JPY', SG: 'SGD', HK: 'HKD', KR: 'KRW',
+  TH: 'THB', VN: 'VND', ID: 'IDR', MY: 'MYR', PH: 'PHP', IN: 'INR', CH: 'CHF', SE: 'SEK', NO: 'NOK', DK: 'DKK',
+  MX: 'MXN', BR: 'BRL', ZA: 'ZAR', AE: 'AED', TW: 'TWD', DE: 'EUR', FR: 'EUR', ES: 'EUR', IT: 'EUR', NL: 'EUR',
+  IE: 'EUR', PT: 'EUR', AT: 'EUR', BE: 'EUR', FI: 'EUR', GR: 'EUR',
+}
+
+/** Best guess at a user's home currency from a locale like "en-AU". */
+export function guessCurrency(locale: string | undefined): string {
+  const region = locale?.split(/[-_]/)[1]?.toUpperCase()
+  return (region && REGION_CURRENCY[region]) || 'AUD'
+}
