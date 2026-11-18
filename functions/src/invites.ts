@@ -22,6 +22,7 @@ export const getInvitePreview = onCall(async (req): Promise<InvitePreview> => {
     startDate: t.startDate,
     endDate: t.endDate,
     coverEmoji: t.coverEmoji ?? null,
+    coverPhotoURL: t.coverPhotoURL ?? null,
     invitedBy: await memberName(trip.id, invite.createdBy),
     alreadyMember: (t.memberIds as string[]).includes(uid),
   }

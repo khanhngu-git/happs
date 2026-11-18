@@ -64,6 +64,7 @@ export const tripSchema = z.object({
   memberIds: z.array(z.string()),
   coverEmoji: z.string().nullable().default(null),
   coverColor: z.string().nullable().default(null),
+  coverPhotoURL: z.string().nullable().default(null),
   createdAt: timestamp.optional(),
   updatedAt: timestamp.optional(),
 })
@@ -212,6 +213,7 @@ export interface InvitePreview {
   startDate: string
   endDate: string
   coverEmoji: string | null
+  coverPhotoURL: string | null
   invitedBy: string
   alreadyMember: boolean
 }

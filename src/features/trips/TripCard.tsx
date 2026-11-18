@@ -25,11 +25,19 @@ export function TripCard({ trip, phase }: { trip: Trip; phase: TripPhase }) {
       to={`/trips/${trip.id}/itinerary`}
       className="group block overflow-hidden rounded-[1.25rem] bg-card ring-1 ring-border/70 transition-shadow outline-none hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/60"
     >
-      <div className={cn('relative flex h-24 items-end bg-gradient-to-br p-4', coverClass(trip.coverColor), phase === 'past' && 'grayscale-[0.5]')}>
-        <span className="absolute top-3 right-4 text-4xl drop-shadow-sm" aria-hidden>
-          {trip.coverEmoji ?? '✈️'}
-        </span>
-        <Badge className="bg-black/35 text-white backdrop-blur-sm">{phaseLabel(trip, phase)}</Badge>
+      <div className={cn('relative flex h-32 items-end bg-gradient-to-br p-4', coverClass(trip.coverColor), phase === 'past' && 'grayscale-[0.5]')}>
+        {trip.coverPhotoURL ? (
+          <>
+            <img src={trip.coverPhotoURL} alt="" loading="lazy" className="absolute inset-0 size-full object-cover" />
+            {/* Dimming so the badge stays legible over bright photos. */}
+            <span className="absolute inset-0 bg-gradient-to-t from-black/45 to-transparent" aria-hidden />
+          </>
+        ) : (
+          <span className="absolute top-3 right-4 text-4xl drop-shadow-sm" aria-hidden>
+            {trip.coverEmoji ?? '✈️'}
+          </span>
+        )}
+        <Badge className="relative bg-black/40 text-white backdrop-blur-sm">{phaseLabel(trip, phase)}</Badge>
       </div>
       <div className="flex items-center gap-3 p-4">
         <div className="min-w-0 flex-1">

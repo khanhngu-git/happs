@@ -121,9 +121,10 @@ service cloud.firestore {
       function validTrip(d) {
         return d.keys().hasAll(['name', 'startDate', 'endDate', 'timeZone', 'baseCurrency', 'ownerId', 'memberIds'])
           && d.keys().hasOnly(['name', 'destination', 'startDate', 'endDate', 'timeZone', 'baseCurrency',
-                               'ownerId', 'memberIds', 'coverEmoji', 'coverColor', 'createdAt', 'updatedAt'])
+                               'ownerId', 'memberIds', 'coverEmoji', 'coverColor', 'coverPhotoURL', 'createdAt', 'updatedAt'])
           && isNonEmptyStr(d.name, 100)
           && optStr(d, 'destination', 200)
+          && (d.get('coverPhotoURL', null) == null || isStr(d.coverPhotoURL, 2000))
           && isDate(d.startDate) && isDate(d.endDate) && d.startDate <= d.endDate
           && isNonEmptyStr(d.timeZone, 64)
           && isCurrency(d.baseCurrency)

@@ -67,10 +67,19 @@ export function JoinPage() {
           <p className="text-center text-[1.0625rem]">
             <strong>{preview.invitedBy}</strong> invited you to
           </p>
-          <div className={cn('rounded-[1.75rem] bg-gradient-to-br from-teal-500 to-cyan-700 p-6 text-white shadow-lg')}>
-            <div className="text-5xl" aria-hidden>
-              {preview.coverEmoji ?? '✈️'}
-            </div>
+          <div className={cn('relative overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-teal-500 to-cyan-700 p-6 text-white shadow-lg', preview.coverPhotoURL && 'pt-32')}>
+            {preview.coverPhotoURL && (
+              <>
+                <img src={preview.coverPhotoURL} alt="" className="absolute inset-0 size-full object-cover" />
+                <span className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent" aria-hidden />
+              </>
+            )}
+            <div className="relative">
+            {!preview.coverPhotoURL && (
+              <div className="text-5xl" aria-hidden>
+                {preview.coverEmoji ?? '✈️'}
+              </div>
+            )}
             <h1 className="mt-4 text-3xl font-bold tracking-tight">{preview.tripName}</h1>
             <div className="mt-3 space-y-1 text-[0.9375rem] font-medium">
               {preview.destination && (
@@ -81,6 +90,7 @@ export function JoinPage() {
               <p className="flex items-center gap-1.5">
                 <CalendarDays className="size-4" aria-hidden /> {formatDateRange(preview.startDate, preview.endDate)}
               </p>
+            </div>
             </div>
           </div>
           {preview.alreadyMember ? (

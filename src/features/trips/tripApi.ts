@@ -12,6 +12,7 @@ export interface TripInput {
   baseCurrency: string
   coverEmoji: string | null
   coverColor: string | null
+  coverPhotoURL?: string | null
 }
 
 /** Trip + the creator's owner member doc in one batch (rules check both together). */

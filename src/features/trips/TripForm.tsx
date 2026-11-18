@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { ImagePlus, X } from 'lucide-react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
@@ -40,8 +42,17 @@ export function TripForm({
   submitLabel: string
   /** Changing base currency after expenses exist would invalidate base amounts. */
   currencyLocked?: boolean
-  onSubmit(values: TripInput): Promise<void>
+  /** `photo`: a new file to upload, null to remove the current photo, undefined to keep it. */
+  onSubmit(values: TripInput, photo: File | null | undefined): Promise<void>
 }) {
+  const [photo, setPhoto] = useState<File | null | undefined>(undefined)
+  const [preview, setPreview] = useState<string | null>(initial?.coverPhotoURL ?? null)
+  useEffect(() => {
+    if (!photo) return
+    const url = URL.createObjectURL(photo)
+    setPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [photo])
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -61,7 +72,7 @@ export function TripForm({
   const currencies = [...new Set([form.getValues('baseCurrency'), defaultCurrency, ...COMMON_CURRENCIES])]
 
   const submit = form.handleSubmit(async (v) => {
-    await onSubmit({ ...v, coverEmoji: v.coverEmoji || null, coverColor: v.coverColor || null })
+    await onSubmit({ ...v, coverEmoji: v.coverEmoji || null, coverColor: v.coverColor || null }, photo)
   })
 
   return (
@@ -113,6 +124,40 @@ export function TripForm({
       </div>
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">Cover</legend>
+        <div className="relative overflow-hidden rounded-2xl bg-foreground/[0.05]">
+          {preview ? (
+            <>
+              <img src={preview} alt="Trip cover" className="aspect-[16/9] w-full object-cover" />
+              <button
+                type="button"
+                onClick={() => {
+                  setPhoto(null)
+                  setPreview(null)
+                }}
+                className="absolute top-2 right-2 inline-flex size-11 items-center justify-center rounded-full bg-black/50 text-white"
+                aria-label="Remove cover photo"
+              >
+                <X className="size-5" />
+              </button>
+            </>
+          ) : (
+            <label className="flex aspect-[16/9] w-full cursor-pointer flex-col items-center justify-center gap-2 text-[0.9375rem] font-medium text-primary">
+              <ImagePlus className="size-7" aria-hidden />
+              Add a cover photo
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) setPhoto(f)
+                  e.target.value = ''
+                }}
+              />
+            </label>
+          )}
+        </div>
+        <p className="pt-1 text-sm text-muted-foreground">{preview ? 'Shown on the trip card and invite.' : 'Or pick an emoji and colour:'}</p>
         <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Emoji">
           {EMOJI.map((e) => (
             <button

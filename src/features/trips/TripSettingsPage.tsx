@@ -10,6 +10,7 @@ import { refs, useLiveQuery } from '@/lib/firestore'
 import { TripForm } from './TripForm'
 import { useTrip } from './TripContext'
 import { deleteTrip, updateTrip } from './tripApi'
+import { removeByUrl, uploadTripCover } from '@/lib/uploads'
 
 export function TripSettingsPage() {
   const { trip, isOwner } = useTrip()
@@ -29,9 +30,15 @@ export function TripSettingsPage() {
             defaultCurrency={trip.baseCurrency}
             currencyLocked={hasExpenses}
             submitLabel="Save changes"
-            onSubmit={async (input) => {
+            onSubmit={async (input, photo) => {
               try {
-                await updateTrip(trip.id, input)
+                let coverPhotoURL = trip.coverPhotoURL
+                if (photo) coverPhotoURL = await uploadTripCover(trip.id, photo, trip.coverPhotoURL)
+                else if (photo === null && trip.coverPhotoURL) {
+                  await removeByUrl(trip.coverPhotoURL)
+                  coverPhotoURL = null
+                }
+                await updateTrip(trip.id, { ...input, coverPhotoURL })
                 toast.success('Trip updated')
                 navigate(`/trips/${trip.id}/itinerary`)
               } catch {
