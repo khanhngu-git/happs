@@ -81,5 +81,12 @@ The `liquid-glass` skill (github.com/heyparsadev/liquid-glass-skill) targets Swi
 - **Hosted checkout only.** We call each vertical's `get-payment-url` and open the returned portal URL. RouteStack is merchant of record and handles payment, traveller details and confirmation. The ACP (agentic Stripe) mode is rejected with a clear message.
 - **No booking webhooks yet,** so we can't see whether the traveller paid. After checkout the sheet offers "Booked it? Add to itinerary", which creates a transport, stay or activity item (with the activity/hotel photo).
 - **Money rule kept:** RouteStack returns decimal prices, which are converted to integer minor units on the server (`src/shared/booking.ts`, unit tested).
-- **Inferred from docs, pending sandbox check:** the return-trip value (`tripType: 'Return'`), the activity age band (`ADULT`), and the hotel destination coordinates field. Normalisers accept the documented shapes and a few likely variants.
+- **Confirmed against the live API (2026-11-19):**
+  - `tripType: 'Return'` works, and the outbound and return segments come back in one list, marked by `legindicator`. The app shows them separately and adds them as two itinerary items.
+  - Fares are priced in USD even when another currency is requested, so the app shows the currency RouteStack returns.
+  - Activity `ageBand: 'ADULT'` works.
+  - Live activity results use `title` and `thumbnailHiResURL`, with duration, rating, review count and free cancellation. Availability leaves option titles empty, so the server also fetches `activity/details` (option names, cancellation policy).
+  - Hotel destinations are points of interest (Google place ids, no coordinates) or single hotels (with coordinates); there are no city entries. The client resolves missing coordinates with Google Places. Hotel prices are the total for the stay.
+  - All three `get-payment-url` calls return a `travel.routestack.ai` portal URL.
+- **Keys:** the keys provided are live keys (the sandbox rejects them), so local dev points at `mcp.routestack.ai` via the git-ignored `functions/.env.local`. The committed `functions/.env` stays on the sandbox.
 - **Trains:** not offered by RouteStack (rail is on their roadmap), so nothing is shown for them.
