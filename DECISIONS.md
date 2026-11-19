@@ -74,3 +74,12 @@ The `liquid-glass` skill (github.com/heyparsadev/liquid-glass-skill) targets Swi
 ## Test isolation
 - `npm run test:rules` and `npm run test:e2e` start their own emulators on separate ports (`firebase.rules-test.json`, `firebase.e2e.json`). E2E runs its own dev server on :5174 with the Auth emulator forced on. Tests can't create real accounts, even when your dev setup uses real Google sign-in, and they don't disturb your dev emulators.
 - **Per-suite emulator temp dirs.** The Storage emulator stores blobs in `$TMPDIR/firebase/storage/blobs` and removes the folder on shutdown. Dev, rules-test and e2e suites shared it, so a finished test run deleted the dev suite's blob folder, and the next upload crashed it (`ENOENT` in `persistence.appendBytes`). Every npm emulator script now sets its own `TMPDIR` under `.emulator-tmp/`.
+
+## Booking via RouteStack
+- **Where:** inside the itinerary. The **+** button opens an action sheet: Add your own / Book a flight / Book a hotel / Book an activity. The booking sheet is prefilled with the trip's destination, dates and group size.
+- **Server-side only.** RouteStack auth is an HMAC of the API key signed with the secret, exchanged for a JWT partner token, so every call goes through the `booking` callable. The token is cached in the function instance and refreshed on 401. Only members of the trip can call it, because each search costs a provider token.
+- **Hosted checkout only.** We call each vertical's `get-payment-url` and open the returned portal URL. RouteStack is merchant of record and handles payment, traveller details and confirmation. The ACP (agentic Stripe) mode is rejected with a clear message.
+- **No booking webhooks yet,** so we can't see whether the traveller paid. After checkout the sheet offers "Booked it? Add to itinerary", which creates a transport, stay or activity item (with the activity/hotel photo).
+- **Money rule kept:** RouteStack returns decimal prices, which are converted to integer minor units on the server (`src/shared/booking.ts`, unit tested).
+- **Inferred from docs, pending sandbox check:** the return-trip value (`tripType: 'Return'`), the activity age band (`ADULT`), and the hotel destination coordinates field. Normalisers accept the documented shapes and a few likely variants.
+- **Trains:** not offered by RouteStack (rail is on their roadmap), so nothing is shown for them.

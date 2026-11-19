@@ -85,6 +85,21 @@ The client config for project `happss` goes in `.env.local` (see `.env.example`)
 
 Never commit service account keys. The Admin SDK key isn't needed for any of the above: deployed functions use their default service account, and local dev uses the emulators.
 
+## Booking (RouteStack)
+
+Flights, hotels and activities can be searched and booked from the itinerary's **+** button, through [RouteStack](https://routestack.ai) (Custom Travel Solutions). RouteStack is the merchant of record. The app never takes payment: **Book** opens RouteStack's hosted checkout, and **Add to itinerary** puts the booking on the plan. Trains aren't offered by RouteStack yet.
+
+- Credentials live only in Cloud Functions (`functions/src/booking.ts`), which exchanges the API key plus an HMAC signed with the secret for a short-lived partner token.
+- **Local:** put your sandbox key and secret in `functions/.secret.local` (git-ignored):
+  ```
+  ROUTESTACK_API_KEY=...
+  ROUTESTACK_API_SECRET=...
+  ```
+  `functions/.env` sets `ROUTESTACK_HOST` (sandbox by default).
+- **Deploy:** `firebase functions:secrets:set ROUTESTACK_API_KEY` and `firebase functions:secrets:set ROUTESTACK_API_SECRET`, using live keys with `ROUTESTACK_HOST=https://mcp.routestack.ai`.
+- In the RouteStack dashboard, keep the checkout mode on **Portal / deeplink**, which returns a checkout URL. The `acp` mode is for AI agents and isn't supported here.
+- Each search spends a RouteStack token (sandbox is unlimited). Autocomplete waits for 3+ characters and a short pause, and only trip members can search.
+
 ## How the money works
 
 - Amounts are **integers in minor units** (cents, fen, yen). `src/shared/money.ts` parses user input with string arithmetic. Floats appear only transiently when applying an FX rate, and the result is rounded straight back to an integer.
