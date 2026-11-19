@@ -11,8 +11,9 @@ import type { ItemPrefill } from '@/features/itinerary/prefill'
 import { api, callableMessage } from '@/lib/functions'
 import { formatMoney } from '@/shared/money'
 import { diffDays } from '@/shared/dates'
-import type { HotelResult } from '@/shared/hotelFinder'
+import { hasReviews, type HotelResult } from '@/shared/hotelFinder'
 import { locateHotel } from './geocode'
+import { HotelReviewsSection } from './HotelReviewsSection'
 
 function Stepper({ id, label, value, min = 1, max, onChange }: { id: string; label: string; value: number; min?: number; max: number; onChange(n: number): void }) {
   return (
@@ -221,6 +222,7 @@ export function HotelFinderSheet({ open, onOpenChange, onPick }: { open: boolean
               </p>
               {hotel.totalEstimated && <p className="text-[0.8125rem] text-muted-foreground">Estimated from the nightly rate; taxes may be extra.</p>}
             </div>
+            {hasReviews(hotel) && <HotelReviewsSection key={hotel.id} hotelId={hotel.id} />}
             <Button size="lg" className="w-full" disabled={adding} onClick={() => add(hotel)}>
               {adding ? <Loader2 className="animate-spin" /> : null} Add stay to itinerary
             </Button>

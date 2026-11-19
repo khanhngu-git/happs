@@ -1,7 +1,7 @@
 import { httpsCallable } from 'firebase/functions'
 import { functions } from './firebase'
 import type { InvitePreview } from '@/shared/schemas'
-import type { HotelResult, HotelSearchInput } from '@/shared/hotelFinder'
+import type { HotelResult, HotelReviews, HotelReviewsInput, HotelSearchInput } from '@/shared/hotelFinder'
 
 /** Typed wrappers around callable Cloud Functions. */
 const call =
@@ -16,6 +16,7 @@ export const api = {
   deleteAccount: call<Record<string, never>, { deleted: boolean }>('deleteAccount'),
   // Scraping Trip.com can take a minute or two.
   hotelFinder: call<HotelSearchInput, { hotels: HotelResult[]; cached: boolean }>('hotelFinder', 180_000),
+  hotelReviews: call<HotelReviewsInput, HotelReviews & { cached: boolean }>('hotelReviews', 150_000),
 }
 
 /** Callable errors carry a friendly message from the server. */
