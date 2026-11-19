@@ -34,7 +34,8 @@ export async function addFlight(trip: Trip, uid: string, items: Item[], f: Fligh
       nextOrder: order,
       values: base({
         type: 'transport',
-        title: `${legs.map((l) => l.flightNumber).join(' + ')} ${first.from} → ${last.to}`,
+        // Short enough to read in a row; flight numbers live in the notes.
+        title: `Flight ${first.from} → ${last.to}`,
         date: first.depart.slice(0, 10),
         startTime: first.depart.slice(11, 16) || null,
         endTime: sameDay ? last.arrive.slice(11, 16) || null : null,

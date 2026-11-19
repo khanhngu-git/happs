@@ -31,13 +31,13 @@ function Summary({ legs }: { legs: FlightLeg[] }) {
   const stops = legs.length - 1
   const dayShift = b.arrive.slice(0, 10) !== a.depart.slice(0, 10)
   return (
-    <span className="block">
-      <span className="font-semibold tabular-nums">
+    <span className="flex items-baseline justify-between gap-2">
+      <span className="font-semibold whitespace-nowrap tabular-nums">
         {t(a.depart)} – {t(b.arrive)}
-        {dayShift && <sup className="ml-0.5 text-[0.6875rem] text-muted-foreground">+1</sup>}
+        {dayShift && <sup className="ml-0.5 text-[0.6875rem] font-medium text-muted-foreground">+1</sup>}
       </span>
-      <span className="ml-2 text-[0.875rem] text-muted-foreground">
-        {a.from}–{b.to} · {stops === 0 ? 'Nonstop' : `${stops} stop${stops > 1 ? 's' : ''}`}
+      <span className="text-[0.8125rem] whitespace-nowrap text-muted-foreground">
+        {a.from}→{b.to} · {stops === 0 ? 'Nonstop' : `${stops} stop${stops > 1 ? 's' : ''}`}
       </span>
     </span>
   )
@@ -150,15 +150,15 @@ export function FlightPanel({ items, onDone }: { items: Item[]; onDone(): void }
             {results?.map((f) => {
               return (
                 <li key={f.id}>
-                  <button type="button" onClick={() => setPicked(f)} className="flex min-h-16 w-full items-center gap-3 px-4 py-2.5 text-left active:bg-foreground/[0.06]">
-                    <Plane className="size-5 shrink-0 text-sky-600 dark:text-sky-400" aria-hidden />
-                    <span className="min-w-0 flex-1">
-                      {journeys(f).map((j) => (
-                        <Summary key={j.label} legs={j.legs} />
-                      ))}
-                      <span className="block truncate text-[0.875rem] text-muted-foreground">{f.legs[0]!.airline}</span>
+                  <button type="button" onClick={() => setPicked(f)} className="block w-full space-y-1 px-4 py-3 text-left active:bg-foreground/[0.06]">
+                    <span className="flex items-center gap-2">
+                      <Plane className="size-4 shrink-0 text-sky-600 dark:text-sky-400" aria-hidden />
+                      <span className="min-w-0 flex-1 truncate text-[0.875rem] text-muted-foreground">{f.legs[0]!.airline}</span>
+                      <span className="text-[1.0625rem] font-semibold tabular-nums">{formatMoney(f.priceMinor, f.currency)}</span>
                     </span>
-                    <span className="font-semibold tabular-nums">{formatMoney(f.priceMinor, f.currency)}</span>
+                    {journeys(f).map((j) => (
+                      <Summary key={j.label} legs={j.legs} />
+                    ))}
                   </button>
                 </li>
               )

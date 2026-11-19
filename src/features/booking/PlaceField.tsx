@@ -32,7 +32,8 @@ export function PlaceField({
   const [results, setResults] = useState<PlaceOption[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [open, setOpen] = useState(!!initialQuery)
+  // Suggestions only show for the focused field, so two lists never overlap.
+  const [open, setOpen] = useState(false)
 
   useEffect(() => {
     if (value || text.trim().length < 3) return
