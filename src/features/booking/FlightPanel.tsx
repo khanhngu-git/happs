@@ -10,13 +10,38 @@ import { api, callableMessage } from '@/lib/functions'
 import type { Item } from '@/lib/firestore'
 import { formatMoney } from '@/shared/money'
 import { formatShortDate, formatTime } from '@/shared/dates'
-import type { FlightOffer, PlaceOption } from '@/shared/booking'
+import type { FlightLeg, FlightOffer, PlaceOption } from '@/shared/booking'
 import { PlaceField } from './PlaceField'
 import { BookActions, ResultsState, Stepper } from './shared'
 import { addFlight } from './addToItinerary'
 
 const hm = (min: number) => `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, '0')}m`
 const t = (iso: string) => formatTime(iso.slice(11, 16))
+
+/** One direction of a trip: its legs, overall times and stop count. */
+function journeys(f: FlightOffer): { label: string; legs: FlightLeg[] }[] {
+  const out = f.legs.filter((l) => l.direction === 0)
+  const back = f.legs.filter((l) => l.direction === 1)
+  return back.length ? [{ label: 'Outbound', legs: out }, { label: 'Return', legs: back }] : [{ label: 'Flight', legs: out }]
+}
+
+function Summary({ legs }: { legs: FlightLeg[] }) {
+  const a = legs[0]!
+  const b = legs[legs.length - 1]!
+  const stops = legs.length - 1
+  const dayShift = b.arrive.slice(0, 10) !== a.depart.slice(0, 10)
+  return (
+    <span className="block">
+      <span className="font-semibold tabular-nums">
+        {t(a.depart)} – {t(b.arrive)}
+        {dayShift && <sup className="ml-0.5 text-[0.6875rem] text-muted-foreground">+1</sup>}
+      </span>
+      <span className="ml-2 text-[0.875rem] text-muted-foreground">
+        {a.from}–{b.to} · {stops === 0 ? 'Nonstop' : `${stops} stop${stops > 1 ? 's' : ''}`}
+      </span>
+    </span>
+  )
+}
 
 export function FlightPanel({ items, onDone }: { items: Item[]; onDone(): void }) {
   const { trip, me, members } = useTrip()
@@ -51,22 +76,29 @@ export function FlightPanel({ items, onDone }: { items: Item[]; onDone(): void }
         <button type="button" onClick={() => setPicked(null)} className="inline-flex h-11 items-center text-[1.0625rem] text-primary">
           <ChevronLeft className="size-6" aria-hidden /> Flights
         </button>
-        <ol className="divide-y divide-border/70 overflow-hidden rounded-2xl bg-card ring-1 ring-border/70">
-          {picked.legs.map((l, i) => (
-            <li key={i} className="px-4 py-3">
-              <p className="font-semibold">
-                {t(l.depart)} {l.from} → {t(l.arrive)} {l.to}
-              </p>
-              <p className="text-[0.875rem] text-muted-foreground">
-                {l.airline} {l.flightNumber} · {formatShortDate(l.depart.slice(0, 10))} · {hm(l.durationMin)}
-              </p>
-            </li>
-          ))}
-        </ol>
+        {journeys(picked).map((j) => (
+          <section key={j.label} aria-label={j.label}>
+            <h3 className="px-4 pb-1.5 text-[0.8125rem] font-medium text-muted-foreground uppercase">
+              {j.label} · {formatShortDate(j.legs[0]!.depart.slice(0, 10))}
+            </h3>
+            <ol className="divide-y divide-border/70 overflow-hidden rounded-2xl bg-card ring-1 ring-border/70">
+              {j.legs.map((l, i) => (
+                <li key={i} className="px-4 py-3">
+                  <p className="font-semibold">
+                    {t(l.depart)} {l.from} → {t(l.arrive)} {l.to}
+                  </p>
+                  <p className="text-[0.875rem] text-muted-foreground">
+                    {l.airline} {l.flightNumber} · {hm(l.durationMin)}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ))}
         <p className="text-[0.875rem] text-muted-foreground">
           {picked.cabin}
           {picked.baggage && ` · checked bag ${picked.baggage}`}
-          {picked.seatsLeft !== null && picked.seatsLeft < 9 && ` · ${picked.seatsLeft} seats left`} · price for {adults} {adults === 1 ? 'adult' : 'adults'}
+          {picked.seatsLeft !== null && picked.seatsLeft < 9 && ` · ${picked.seatsLeft} seats left`} · total for {adults} {adults === 1 ? 'adult' : 'adults'}
         </p>
         <BookActions
           kind="flight"
@@ -116,19 +148,15 @@ export function FlightPanel({ items, onDone }: { items: Item[]; onDone(): void }
         <ResultsState busy={busy} error={error} empty={results?.length === 0}>
           <ul className="divide-y divide-border/70 overflow-hidden rounded-2xl bg-card ring-1 ring-border/70">
             {results?.map((f) => {
-              const a = f.legs[0]!
-              const b = f.legs[f.legs.length - 1]!
               return (
                 <li key={f.id}>
                   <button type="button" onClick={() => setPicked(f)} className="flex min-h-16 w-full items-center gap-3 px-4 py-2.5 text-left active:bg-foreground/[0.06]">
                     <Plane className="size-5 shrink-0 text-sky-600 dark:text-sky-400" aria-hidden />
                     <span className="min-w-0 flex-1">
-                      <span className="block font-semibold tabular-nums">
-                        {t(a.depart)} – {t(b.arrive)}
-                      </span>
-                      <span className="block truncate text-[0.875rem] text-muted-foreground">
-                        {a.airline} · {f.stops === 0 ? 'Nonstop' : `${f.stops} stop${f.stops > 1 ? 's' : ''}`} · {hm(f.legs.reduce((s, l) => s + l.durationMin, 0))}
-                      </span>
+                      {journeys(f).map((j) => (
+                        <Summary key={j.label} legs={j.legs} />
+                      ))}
+                      <span className="block truncate text-[0.875rem] text-muted-foreground">{f.legs[0]!.airline}</span>
                     </span>
                     <span className="font-semibold tabular-nums">{formatMoney(f.priceMinor, f.currency)}</span>
                   </button>

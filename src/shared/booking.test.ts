@@ -27,6 +27,7 @@ const flightRes = {
           arrivalTime: '2026-10-16T09:43:00',
           flightCode: 'AA',
           flightNumber: '525',
+          legindicator: 0,
           remainingSeats: 7,
           checkInBaggage: [{ type: 'Adult', value: '0PC' }],
         },
@@ -50,13 +51,15 @@ describe('booking normalisers', () => {
     const [f, ...rest] = normalizeFlights(flightRes, { origin: 'MIA', destination: 'JFK', departureDate: '2026-10-16', adults: 1 })
     expect(rest).toHaveLength(0)
     expect(f).toMatchObject({ stops: 0, cabin: 'Economy', priceMinor: 26365, currency: 'USD', seatsLeft: 7, baggage: '0PC' })
-    expect(f!.legs[0]).toMatchObject({ flightNumber: 'AA525', from: 'MIA', to: 'JFK', depart: '2026-10-16T06:42', arrive: '2026-10-16T09:43', durationMin: 181 })
+    expect(f!.legs[0]).toMatchObject({ flightNumber: 'AA525', from: 'MIA', to: 'JFK', depart: '2026-10-16T06:42', arrive: '2026-10-16T09:43', durationMin: 181, direction: 0 })
     expect(f!.ref).toMatchObject({ offer: { fareSourceCode: 'FSC123' }, search: { origin: 'MIA', sessionId: 'sess1', correlationId: 'c1' } })
   })
 
   it('places for each vertical', () => {
     expect(normalizePlaces('flight', { result: [{ name: 'London Heathrow', code: 'LHR', city: 'London', country: 'United Kingdom' }] })[0]).toMatchObject({ id: 'LHR', label: 'London (LHR)' })
-    expect(normalizePlaces('hotel', { result: [{ id: '70475484', fullName: 'Dubai, UAE', city: 'Dubai', country: 'UAE', type: 'DESTINATION', coordinates: { lat: 25.2, long: 55.3 } }] })[0]).toMatchObject({ id: '70475484', lat: 25.2, lng: 55.3, type: 'DESTINATION' })
+    expect(normalizePlaces('hotel', { result: [{ id: '31055408', fullName: 'Tokyo House, Tokyo, JP', type: 'Hotel', coordinates: { lat: 35.578205, long: 139.72916 } }] })[0]).toMatchObject({ id: '31055408', lat: 35.578205, lng: 139.72916, type: 'Hotel', sub: 'Hotel' })
+    // Live: points of interest are Google place ids without coordinates
+    expect(normalizePlaces('hotel', { result: [{ id: 'ChIJCewJkL2LGGAR3Qmk0vCTGkg', fullName: 'Tokyo Tower, Minato City, Tokyo, Japan', type: 'PointOfInterest', coordinates: null }] })[0]).toMatchObject({ lat: null, lng: null, type: 'PointOfInterest', sub: 'Area' })
     expect(normalizePlaces('activity', { result: [{ type: 'destination', name: 'Dubai', destinationId: 828, destinationName: 'United Arab Emirates' }] })[0]).toMatchObject({ id: '828', label: 'Dubai' })
   })
 
@@ -76,6 +79,11 @@ describe('booking normalisers', () => {
   })
 
   it('activities and their bookable options', () => {
+    // Live search-v2 shape (title, hi-res thumbnail, currency on the envelope)
+    expect(
+      normalizeActivities({ result: { currency: 'USD', activities: [{ activityCode: '28575P41', title: 'Mt Fuji and Hakone 1-Day Bus Tour', thumbnailURL: '', thumbnailHiResURL: 'https://t/hi.jpg', duration: '11 Hours', rating: 5, reviewCount: 33660, freeCancellation: true, showOurPrice: 152.63 }] } })[0],
+    ).toMatchObject({ code: '28575P41', name: 'Mt Fuji and Hakone 1-Day Bus Tour', image: 'https://t/hi.jpg', duration: '11 Hours', rating: 5, freeCancellation: true, priceMinor: 15263, currency: 'USD' })
+    // Documented example shape still works
     expect(normalizeActivities({ result: { activities: [{ activityCode: '119405P17', name: 'Deep Sea Fishing Trip', thumbnailURL: 'https://t/x.jpg', destinationName: 'UAE', showOurPrice: 814.34 }] } })[0]).toMatchObject({ code: '119405P17', priceMinor: 81434 })
     const opts = normalizeActivityOptions({
       result: {
@@ -86,7 +94,12 @@ describe('booking normalisers', () => {
         ],
       },
     })
-    expect(opts).toEqual([{ gradeCode: 'TG2', startTimes: ['06:00'], priceMinor: 87653, currency: 'USD' }])
+    expect(opts).toEqual([{ gradeCode: 'TG2', title: null, description: null, startTimes: ['06:00'], priceMinor: 87653, currency: 'USD' }])
+    const named = normalizeActivityOptions(
+      { result: { currency: 'USD', bookableItems: [{ gradeCode: 'TG7', title: null, availabilityDetails: [{ startTime: '07:20', totalPrice: { price: { showOurPrice: 317.97 } } }] }] } },
+      { result: { bookableItems: [{ gradeCode: 'TG7', title: 'From Matsuya Ginza (Lunch)', description: '★: With Lunch and return ticket by Bullet train\nStarting point: …' }] } },
+    )
+    expect(named[0]).toMatchObject({ title: 'From Matsuya Ginza (Lunch)', description: 'With Lunch and return ticket by Bullet train', priceMinor: 31797 })
   })
 
   it('only accepts https checkout URLs', () => {

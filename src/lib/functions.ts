@@ -14,7 +14,7 @@ export const api = {
   joinTrip: call<{ code: string }, { tripId: string; alreadyMember: boolean }>('joinTrip'),
   removeMember: call<{ tripId: string; uid: string }, { removed: boolean }>('removeMember'),
   deleteAccount: call<Record<string, never>, { deleted: boolean }>('deleteAccount'),
-  booking: call<BookingInput, Partial<{ places: PlaceOption[]; flights: FlightOffer[]; hotels: HotelOffer[]; rooms: HotelRoom[]; activities: ActivityOffer[]; options: (ActivityOption & { ref: unknown })[]; url: string }>>('booking'),
+  booking: call<BookingInput, Partial<{ places: PlaceOption[]; flights: FlightOffer[]; hotels: HotelOffer[]; rooms: HotelRoom[]; activities: ActivityOffer[]; options: (ActivityOption & { ref: unknown })[]; cancellation: string | null; url: string }>>('booking'),
 }
 
 /** Callable errors carry a friendly message from the server. */

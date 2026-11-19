@@ -34,6 +34,8 @@ export interface FlightLeg {
   depart: string
   arrive: string
   durationMin: number
+  /** 0 = outbound, 1 = return (RouteStack `legindicator`). */
+  direction: 0 | 1
 }
 
 export interface FlightOffer {
@@ -78,10 +80,16 @@ export interface ActivityOffer {
   place: string | null
   priceMinor: number
   currency: string
+  duration: string | null
+  rating: number | null
+  reviewCount: number | null
+  freeCancellation: boolean
 }
 
 export interface ActivityOption {
   gradeCode: string
+  title: string | null
+  description: string | null
   startTimes: string[]
   priceMinor: number
   currency: string
@@ -168,8 +176,10 @@ export function normalizePlaces(kind: BookingKind, res: unknown): PlaceOption[] 
     if (kind === 'hotel') {
       const id = str(p.id)
       if (!id) return []
-      const c = coords(p.coordinates ?? p)
-      return [{ id, label: str(p.fullName) || str(p.name) || str(p.city), sub: [str(p.city), str(p.country)].filter(Boolean).join(', '), ...c, type: str(p.type) || null }]
+      const c = coords(p.coordinates)
+      const type = str(p.type) || null
+      const kind = type === 'Hotel' ? 'Hotel' : type === 'Airport' ? 'Airport' : 'Area'
+      return [{ id, label: str(p.fullName) || str(p.name) || str(p.city), sub: kind, ...c, type }]
     }
     const id = str(p.destinationId)
     if (!id) return []
@@ -195,6 +205,7 @@ export function normalizeFlights(res: unknown, search: J): FlightOffer[] {
         depart: str(l.departureTime).slice(0, 16),
         arrive: str(l.arrivalTime).slice(0, 16),
         durationMin: num(l.triptime) ?? 0,
+        direction: num(l.legindicator) === 1 ? 1 : 0,
       }
     })
     if (priceMinor === null || legs.length === 0) return []
@@ -272,24 +283,46 @@ export function normalizeActivities(res: unknown): ActivityOffer[] {
   const list = arr(env.activities ?? env.result ?? payload(res))
   return list.flatMap((raw): ActivityOffer[] => {
     const a = obj(raw)
-    const currency = (str(a.currency) || 'USD').toUpperCase()
+    const currency = (str(a.currency) || str(obj(a.pricing).currency) || str(env.currency) || 'USD').toUpperCase()
     const priceMinor = priceToMinor(a.showOurPrice ?? a.ourPrice, currency)
     if (!str(a.activityCode) || priceMinor === null) return []
-    return [{ code: str(a.activityCode), name: str(a.name), image: str(a.thumbnailURL) || null, place: str(a.destinationName) || null, priceMinor, currency }]
+    return [
+      {
+        code: str(a.activityCode),
+        name: str(a.title) || str(a.name),
+        image: str(a.thumbnailHiResURL) || str(a.thumbnailURL) || null,
+        place: str(a.destinationName) || null,
+        priceMinor,
+        currency,
+        duration: str(a.duration) || null,
+        rating: num(a.rating),
+        reviewCount: num(a.reviewCount),
+        freeCancellation: a.freeCancellation === true,
+      },
+    ]
   })
 }
 
-export function normalizeActivityOptions(res: unknown): ActivityOption[] {
+/** Bookable options from availability, named from the activity's details (availability leaves titles empty). */
+export function normalizeActivityOptions(res: unknown, details?: unknown): ActivityOption[] {
   const env = obj(payload(res))
   const currency = (str(env.currency) || 'USD').toUpperCase()
+  const named = new Map(arr(obj(payload(details)).bookableItems).map((b) => [str(obj(b).gradeCode), obj(b)]))
   return arr(env.bookableItems).flatMap((raw): ActivityOption[] => {
     const item = obj(raw)
     const slots = arr(item.availabilityDetails).map(obj).filter((s) => s.available !== false)
     if (!str(item.gradeCode) || slots.length === 0) return []
     const prices = slots.map((s) => priceToMinor(obj(obj(s.totalPrice).price).showOurPrice ?? obj(obj(s.totalPrice).price).ourPrice, currency)).filter((p): p is number => p !== null)
     if (prices.length === 0) return []
-    return [{ gradeCode: str(item.gradeCode), startTimes: slots.map((s) => str(s.startTime)).filter(Boolean), priceMinor: Math.min(...prices), currency }]
+    const info = named.get(str(item.gradeCode))
+    const description = (str(item.description) || str(info?.description)).split('\n')[0]?.replace(/^\W+/, '').trim() || null
+    return [{ gradeCode: str(item.gradeCode), title: str(item.title) || str(info?.title) || null, description, startTimes: slots.map((s) => str(s.startTime)).filter(Boolean), priceMinor: Math.min(...prices), currency }]
   })
+}
+
+/** Human cancellation policy text from activity details, if present. */
+export function activityCancellation(details: unknown): string | null {
+  return str(obj(obj(payload(details)).cancellationPolicy).description) || null
 }
 
 /** Checkout handle: we only support the hosted (deeplink) portal URL. */

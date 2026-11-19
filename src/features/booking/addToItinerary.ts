@@ -18,26 +18,32 @@ const base = (p: Partial<ItemValues> & { type: ItemType; title: string; date: st
 
 const nextOrder = (items: Item[]) => Math.max(0, ...items.map((i) => i.order)) + 1000
 
+/** A return flight becomes two itinerary items: outbound and return. */
 export async function addFlight(trip: Trip, uid: string, items: Item[], f: FlightOffer) {
-  const first = f.legs[0]!
-  const last = f.legs[f.legs.length - 1]!
-  const sameDay = first.depart.slice(0, 10) === last.arrive.slice(0, 10)
-  await saveItem({
-    trip,
-    uid,
-    existing: null,
-    cost: null,
-    nextOrder: nextOrder(items),
-    values: base({
-      type: 'transport',
-      title: `${f.legs.map((l) => l.flightNumber).join(' + ')} ${first.from} → ${last.to}`,
-      date: first.depart.slice(0, 10),
-      startTime: first.depart.slice(11, 16) || null,
-      endTime: sameDay ? last.arrive.slice(11, 16) || null : null,
-      location: { placeId: null, name: last.toName || last.to, address: '', lat: null, lng: null },
-      notes: f.legs.map((l) => `${l.airline} ${l.flightNumber}: ${l.from} ${l.depart.slice(11, 16)} → ${l.to} ${l.arrive.slice(11, 16)}`).join('\n') + '\nBooked via RouteStack',
-    }),
-  })
+  const groups = [f.legs.filter((l) => l.direction === 0), f.legs.filter((l) => l.direction === 1)].filter((g) => g.length > 0)
+  let order = nextOrder(items)
+  for (const legs of groups) {
+    const first = legs[0]!
+    const last = legs[legs.length - 1]!
+    const sameDay = first.depart.slice(0, 10) === last.arrive.slice(0, 10)
+    await saveItem({
+      trip,
+      uid,
+      existing: null,
+      cost: null,
+      nextOrder: order,
+      values: base({
+        type: 'transport',
+        title: `${legs.map((l) => l.flightNumber).join(' + ')} ${first.from} → ${last.to}`,
+        date: first.depart.slice(0, 10),
+        startTime: first.depart.slice(11, 16) || null,
+        endTime: sameDay ? last.arrive.slice(11, 16) || null : null,
+        location: { placeId: null, name: last.toName || last.to, address: '', lat: null, lng: null },
+        notes: legs.map((l) => `${l.airline} ${l.flightNumber}: ${l.from} ${l.depart.slice(11, 16)} → ${l.to} ${l.arrive.slice(11, 16)}`).join('\n') + '\nBooked via RouteStack',
+      }),
+    })
+    order += 1000
+  }
 }
 
 export async function addStay(trip: Trip, uid: string, items: Item[], h: { name: string; address: string | null; image: string | null; checkIn: string; checkOut: string }) {

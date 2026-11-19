@@ -17,6 +17,7 @@ import { parseInput, requireAuth } from './util'
 import {
   bookingInput,
   checkoutUrl,
+  activityCancellation,
   normalizeActivities,
   normalizeActivityOptions,
   normalizeFlights,
@@ -221,13 +222,18 @@ export const booking = onCall({ secrets: [API_KEY, API_SECRET], timeoutSeconds: 
       return { activities: normalizeActivities(res) }
     }
     case 'activityOptions': {
-      const res = await rs('/mcp/activity/availability', {
-        activityCode: input.activityCode,
-        travelDate: input.date,
-        ageBands: [{ ageBand: 'ADULT', numberOfTravelers: input.adults }],
-      })
+      // Availability has prices and times; details names the options and gives the cancellation policy.
+      const [res, details] = await Promise.all([
+        rs('/mcp/activity/availability', {
+          activityCode: input.activityCode,
+          travelDate: input.date,
+          ageBands: [{ ageBand: 'ADULT', numberOfTravelers: input.adults }],
+        }),
+        rs('/mcp/activity/details', { activityCode: input.activityCode, startDate: input.date, endDate: input.date }).catch(() => null),
+      ])
       return {
-        options: normalizeActivityOptions(res).map((o) => ({ ...o, ref: { activityCode: input.activityCode, gradeCode: o.gradeCode, travelDate: input.date, adults: input.adults } })),
+        cancellation: activityCancellation(details),
+        options: normalizeActivityOptions(res, details).map((o) => ({ ...o, ref: { activityCode: input.activityCode, gradeCode: o.gradeCode, travelDate: input.date, adults: input.adults } })),
       }
     }
     case 'checkout': {

@@ -27,6 +27,7 @@ export function ActivityPanel({ items, day, onDone }: { items: Item[]; day: stri
   const [results, setResults] = useState<ActivityOffer[] | null>(null)
   const [activity, setActivity] = useState<ActivityOffer | null>(null)
   const [options, setOptions] = useState<Option[] | null>(null)
+  const [cancellation, setCancellation] = useState<string | null>(null)
   const [slot, setSlot] = useState<{ option: Option; time: string | null } | null>(null)
 
   async function search() {
@@ -52,6 +53,7 @@ export function ActivityPanel({ items, day, onDone }: { items: Item[]; day: stri
     try {
       const res = await api.booking({ action: 'activityOptions', tripId: trip.id, activityCode: a.code, date, adults })
       setOptions(res.options ?? [])
+      setCancellation(res.cancellation ?? null)
     } catch (err) {
       setError(callableMessage(err))
     } finally {
@@ -66,12 +68,23 @@ export function ActivityPanel({ items, day, onDone }: { items: Item[]; day: stri
           <ChevronLeft className="size-6" aria-hidden /> Activities
         </button>
         {activity.image && <img src={activity.image} alt="" className="aspect-[16/9] w-full rounded-2xl object-cover" />}
-        <p className="text-xl font-bold">{activity.name}</p>
+        <div>
+          <p className="text-xl font-bold">{activity.name}</p>
+          <p className="text-[0.875rem] text-muted-foreground">{[activity.duration, activity.rating ? `★ ${activity.rating}${activity.reviewCount ? ` (${activity.reviewCount.toLocaleString()})` : ''}` : null].filter(Boolean).join(' · ')}</p>
+        </div>
+        {cancellation && <p className="rounded-2xl bg-success/10 px-4 py-3 text-[0.875rem]">{cancellation}</p>}
         <ResultsState busy={busy} error={error} empty={options?.length === 0}>
           <div className="space-y-3">
             {options?.map((o) => (
               <div key={o.gradeCode} className="space-y-2 rounded-2xl bg-card p-4 ring-1 ring-border/70">
-                <p className="font-semibold tabular-nums">{formatMoney(o.priceMinor, o.currency)} for {adults}</p>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold">{o.title ?? 'Standard option'}</p>
+                    {o.description && <p className="text-[0.875rem] text-muted-foreground">{o.description}</p>}
+                  </div>
+                  <p className="shrink-0 font-semibold tabular-nums">{formatMoney(o.priceMinor, o.currency)}</p>
+                </div>
+                <p className="text-[0.8125rem] text-muted-foreground">Total for {adults}</p>
                 <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Start time">
                   {(o.startTimes.length ? o.startTimes : [null]).map((time) => {
                     const on = slot?.option.gradeCode === o.gradeCode && slot.time === time
@@ -141,7 +154,10 @@ export function ActivityPanel({ items, day, onDone }: { items: Item[]; day: stri
                   )}
                   <span className="min-w-0 flex-1">
                     <span className="line-clamp-2 font-semibold">{a.name}</span>
-                    <span className="block pt-1 text-[0.875rem] tabular-nums">from {formatMoney(a.priceMinor, a.currency)}</span>
+                    <span className="block pt-0.5 text-[0.8125rem] text-muted-foreground">
+                      {[a.duration, a.rating ? `★ ${a.rating}` : null, a.freeCancellation ? 'Free cancellation' : null].filter(Boolean).join(' · ')}
+                    </span>
+                    <span className="block pt-0.5 text-[0.875rem] font-semibold tabular-nums">from {formatMoney(a.priceMinor, a.currency)} pp</span>
                   </span>
                 </button>
               </li>

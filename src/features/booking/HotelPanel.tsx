@@ -28,9 +28,28 @@ export function HotelPanel({ items, onDone }: { items: Item[]; onDone(): void })
   const [roomList, setRoomList] = useState<HotelRoom[] | null>(null)
   const [room, setRoom] = useState<HotelRoom | null>(null)
 
+  /** RouteStack areas are Google place ids without coordinates; fetch them from Google Places. */
+  async function pickPlace(p: PlaceOption | null) {
+    setError(null)
+    if (!p || p.lat !== null) return setPlace(p)
+    const Place = (window as unknown as { google?: typeof google }).google?.maps?.places?.Place
+    if (!Place || !p.id.startsWith('ChIJ')) {
+      setPlace(null)
+      return setError('Pick a hotel from the list, or try a nearby landmark.')
+    }
+    try {
+      const gp = new Place({ id: p.id })
+      await gp.fetchFields({ fields: ['location'] })
+      setPlace({ ...p, lat: gp.location?.lat() ?? null, lng: gp.location?.lng() ?? null })
+    } catch {
+      setPlace(null)
+      setError('Couldn’t find that place on the map. Try another.')
+    }
+  }
+
   async function search() {
     if (!place) return setError('Choose where you’re staying.')
-    if (place.lat === null || place.lng === null) return setError('Pick a city or area from the list.')
+    if (place.lat === null || place.lng === null) return setError('Pick a place from the list.')
     if (checkOut <= checkIn) return setError('Check-out must be after check-in.')
     setBusy(true)
     setError(null)
@@ -122,7 +141,7 @@ export function HotelPanel({ items, onDone }: { items: Item[]; onDone(): void })
 
   return (
     <div className="space-y-4">
-      <PlaceField id="ho-place" label="Where" kind="hotel" tripId={trip.id} value={place} onChange={setPlace} initialQuery={trip.destination.split(',')[0] ?? ''} placeholder="City or area" />
+      <PlaceField id="ho-place" label="Near" kind="hotel" tripId={trip.id} value={place} onChange={pickPlace} initialQuery={trip.destination.split(',')[0] ?? ''} placeholder="Area, landmark or hotel" />
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
           <Label htmlFor="ho-in">Check in</Label>
@@ -161,7 +180,9 @@ export function HotelPanel({ items, onDone }: { items: Item[]; onDone(): void })
                       )}
                       {h.rating !== null && ` · ${h.rating}${h.reviewCount ? ` (${h.reviewCount})` : ''}`}
                     </span>
-                    <span className="block pt-1 font-semibold tabular-nums">{formatMoney(h.priceMinor, h.currency)}</span>
+                    <span className="block pt-1 font-semibold tabular-nums">
+                      {formatMoney(h.priceMinor, h.currency)} <span className="text-[0.8125rem] font-normal text-muted-foreground">total stay</span>
+                    </span>
                   </span>
                 </button>
               </li>
