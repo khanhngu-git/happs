@@ -10,7 +10,7 @@
  * traveller picks something (rooms, availability, checkout).
  */
 import { z } from 'zod'
-import { currencyDigits, parseDecimalToMinor } from './money'
+import { convertMinor, currencyDigits, parseDecimalToMinor } from './money'
 
 export type BookingKind = 'flight' | 'hotel' | 'activity'
 
@@ -93,6 +93,32 @@ export interface ActivityOption {
   startTimes: string[]
   priceMinor: number
   currency: string
+}
+
+/**
+ * Price shown to the traveller, in the trip's base currency. `approximate`
+ * means it was converted with a reference FX rate because the provider only
+ * quotes (and charges) in its own currency; the UI then also shows the
+ * provider amount that checkout will charge.
+ */
+export interface DisplayPrice {
+  priceMinor: number
+  currency: string
+  approximate: boolean
+}
+
+/** Add `display` to each priced result. `rate` = units of `base` per unit of the result's currency. */
+export function withDisplayPrice<T extends { priceMinor: number; currency: string }>(
+  list: T[],
+  base: string,
+  rateFor: (currency: string) => number | null,
+): (T & { display: DisplayPrice })[] {
+  return list.map((x) => {
+    if (x.currency === base) return { ...x, display: { priceMinor: x.priceMinor, currency: base, approximate: false } }
+    const rate = rateFor(x.currency)
+    if (!rate) return { ...x, display: { priceMinor: x.priceMinor, currency: x.currency, approximate: false } }
+    return { ...x, display: { priceMinor: convertMinor(x.priceMinor, x.currency, base, rate), currency: base, approximate: true } }
+  })
 }
 
 /* ---------- callable input ---------- */

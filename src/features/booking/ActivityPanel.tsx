@@ -8,14 +8,15 @@ import { useTrip } from '@/features/trips/TripContext'
 import { api, callableMessage } from '@/lib/functions'
 import type { Item } from '@/lib/firestore'
 import { cn } from '@/lib/utils'
-import { formatMoney } from '@/shared/money'
 import { formatTime } from '@/shared/dates'
-import type { ActivityOffer, ActivityOption, PlaceOption } from '@/shared/booking'
+import type { ActivityOffer, ActivityOption, DisplayPrice, PlaceOption } from '@/shared/booking'
 import { PlaceField } from './PlaceField'
-import { BookActions, ResultsState, Stepper } from './shared'
+import { BookActions, Price, ResultsState, Stepper } from './shared'
+import { priceLabel } from './price'
 import { addActivity } from './addToItinerary'
 
-type Option = ActivityOption & { ref: unknown }
+type Option = ActivityOption & { ref: unknown; display: DisplayPrice }
+type Activity = ActivityOffer & { display: DisplayPrice }
 
 export function ActivityPanel({ items, day, onDone }: { items: Item[]; day: string; onDone(): void }) {
   const { trip, me, members } = useTrip()
@@ -24,8 +25,8 @@ export function ActivityPanel({ items, day, onDone }: { items: Item[]; day: stri
   const [adults, setAdults] = useState(Math.max(1, members.length))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [results, setResults] = useState<ActivityOffer[] | null>(null)
-  const [activity, setActivity] = useState<ActivityOffer | null>(null)
+  const [results, setResults] = useState<Activity[] | null>(null)
+  const [activity, setActivity] = useState<Activity | null>(null)
   const [options, setOptions] = useState<Option[] | null>(null)
   const [cancellation, setCancellation] = useState<string | null>(null)
   const [slot, setSlot] = useState<{ option: Option; time: string | null } | null>(null)
@@ -44,7 +45,7 @@ export function ActivityPanel({ items, day, onDone }: { items: Item[]; day: stri
     }
   }
 
-  async function openActivity(a: ActivityOffer) {
+  async function openActivity(a: Activity) {
     setActivity(a)
     setOptions(null)
     setSlot(null)
@@ -82,7 +83,7 @@ export function ActivityPanel({ items, day, onDone }: { items: Item[]; day: stri
                     <p className="font-semibold">{o.title ?? 'Standard option'}</p>
                     {o.description && <p className="text-[0.875rem] text-muted-foreground">{o.description}</p>}
                   </div>
-                  <p className="shrink-0 font-semibold tabular-nums">{formatMoney(o.priceMinor, o.currency)}</p>
+                  <Price item={o} className="shrink-0" />
                 </div>
                 <p className="text-[0.8125rem] text-muted-foreground">Total for {adults}</p>
                 <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Start time">
@@ -110,7 +111,7 @@ export function ActivityPanel({ items, day, onDone }: { items: Item[]; day: stri
           <BookActions
             kind="activity"
             bookRef={{ ...(slot.option.ref as object), startTime: slot.time ?? undefined }}
-            priceLabel={formatMoney(slot.option.priceMinor, slot.option.currency)}
+            priceLabel={priceLabel(slot.option)}
             onAdd={async () => {
               await addActivity(trip, me, items, { name: activity.name, date, startTime: slot.time, image: activity.image, place: activity.place }).then(
                 () => {
@@ -157,7 +158,9 @@ export function ActivityPanel({ items, day, onDone }: { items: Item[]; day: stri
                     <span className="block pt-0.5 text-[0.8125rem] text-muted-foreground">
                       {[a.duration, a.rating ? `★ ${a.rating}` : null, a.freeCancellation ? 'Free cancellation' : null].filter(Boolean).join(' · ')}
                     </span>
-                    <span className="block pt-0.5 text-[0.875rem] font-semibold tabular-nums">from {formatMoney(a.priceMinor, a.currency)} pp</span>
+                    <span className="flex items-baseline gap-1 pt-0.5 text-[0.875rem]">
+                      from <Price item={a} suffix="pp" className="items-start text-left" />
+                    </span>
                   </span>
                 </button>
               </li>

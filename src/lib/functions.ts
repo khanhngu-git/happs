@@ -1,7 +1,9 @@
 import { httpsCallable } from 'firebase/functions'
 import { functions } from './firebase'
 import type { InvitePreview } from '@/shared/schemas'
-import type { ActivityOffer, ActivityOption, BookingInput, FlightOffer, HotelOffer, HotelRoom, PlaceOption } from '@/shared/booking'
+import type { ActivityOffer, ActivityOption, BookingInput, DisplayPrice, FlightOffer, HotelOffer, HotelRoom, PlaceOption } from '@/shared/booking'
+
+type Priced<T> = T & { display: DisplayPrice }
 
 /** Typed wrappers around callable Cloud Functions. */
 const call =
@@ -14,7 +16,7 @@ export const api = {
   joinTrip: call<{ code: string }, { tripId: string; alreadyMember: boolean }>('joinTrip'),
   removeMember: call<{ tripId: string; uid: string }, { removed: boolean }>('removeMember'),
   deleteAccount: call<Record<string, never>, { deleted: boolean }>('deleteAccount'),
-  booking: call<BookingInput, Partial<{ places: PlaceOption[]; flights: FlightOffer[]; hotels: HotelOffer[]; rooms: HotelRoom[]; activities: ActivityOffer[]; options: (ActivityOption & { ref: unknown })[]; cancellation: string | null; url: string }>>('booking'),
+  booking: call<BookingInput, Partial<{ places: PlaceOption[]; flights: Priced<FlightOffer>[]; hotels: Priced<HotelOffer>[]; rooms: Priced<HotelRoom>[]; activities: Priced<ActivityOffer>[]; options: Priced<ActivityOption & { ref: unknown }>[]; cancellation: string | null; url: string }>>('booking'),
 }
 
 /** Callable errors carry a friendly message from the server. */

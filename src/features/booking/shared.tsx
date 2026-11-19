@@ -4,7 +4,9 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { useTrip } from '@/features/trips/TripContext'
-import type { BookingKind } from '@/shared/booking'
+import type { BookingKind, DisplayPrice } from '@/shared/booking'
+import { formatMoney } from '@/shared/money'
+import { cn } from '@/lib/utils'
 import { openCheckout } from './checkout'
 
 /** iOS-style − n + stepper. */
@@ -84,5 +86,24 @@ export function BookActions({ kind, bookRef, priceLabel, onAdd }: { kind: Bookin
       </Button>
       <p className="text-center text-[0.8125rem] text-muted-foreground">Payment and confirmation happen on RouteStack’s secure checkout.</p>
     </div>
+  )
+}
+
+/**
+ * A price in the trip's base currency. When it was converted (the provider
+ * only quotes another currency), it reads "≈ A$…" and the amount checkout
+ * will actually charge is shown underneath.
+ */
+export function Price({ item, className, suffix }: { item: { priceMinor: number; currency: string; display?: DisplayPrice }; className?: string; suffix?: string }) {
+  const d = item.display ?? { priceMinor: item.priceMinor, currency: item.currency, approximate: false }
+  return (
+    <span className={cn('inline-flex flex-col items-end text-right', className)}>
+      <span className="font-semibold whitespace-nowrap tabular-nums">
+        {d.approximate && '≈ '}
+        {formatMoney(d.priceMinor, d.currency)}
+        {suffix && <span className="text-[0.8125rem] font-normal text-muted-foreground"> {suffix}</span>}
+      </span>
+      {d.approximate && <span className="text-[0.75rem] whitespace-nowrap text-muted-foreground tabular-nums">{formatMoney(item.priceMinor, item.currency)} at checkout</span>}
+    </span>
   )
 }

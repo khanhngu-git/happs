@@ -83,7 +83,8 @@ The `liquid-glass` skill (github.com/heyparsadev/liquid-glass-skill) targets Swi
 - **Money rule kept:** RouteStack returns decimal prices, which are converted to integer minor units on the server (`src/shared/booking.ts`, unit tested).
 - **Confirmed against the live API (2026-11-19):**
   - `tripType: 'Return'` works, and the outbound and return segments come back in one list, marked by `legindicator`. The app shows them separately and adds them as two itinerary items.
-  - Fares are priced in USD even when another currency is requested, so the app shows the currency RouteStack returns.
+  - Flights are always quoted and charged in USD; the `currency` parameter is ignored and the rate fields are 1. Hotels and activities honour `currency`, so they're requested, and charged, in the trip's base currency.
+  - Prices show in the trip's base currency. Anything RouteStack can only quote in another currency (flights) is converted with the day's ECB rate (Frankfurter, cached an hour). It's shown as "≈ A$…" with the real checkout amount underneath ("US$… at checkout"), so nobody is surprised at payment.
   - Activity `ageBand: 'ADULT'` works.
   - Live activity results use `title` and `thumbnailHiResURL`, with duration, rating, review count and free cancellation. Availability leaves option titles empty, so the server also fetches `activity/details` (option names, cancellation policy).
   - Hotel destinations are points of interest (Google place ids, no coordinates) or single hotels (with coordinates); there are no city entries. The client resolves missing coordinates with Google Places. Hotel prices are the total for the stay.

@@ -24,7 +24,9 @@ import {
   normalizeHotels,
   normalizePlaces,
   normalizeRooms,
+  withDisplayPrice,
 } from '@shared/booking'
+import { fetchFxRate } from '@shared/fx'
 
 const API_KEY = defineSecret('ROUTESTACK_API_KEY')
 const API_SECRET = defineSecret('ROUTESTACK_API_SECRET')
@@ -85,6 +87,26 @@ async function rs(path: string, body: unknown, retry = true): Promise<unknown> {
 
 type J = Record<string, unknown>
 
+/** Reference FX rates (Frankfurter/ECB), cached for an hour per instance. */
+const fxCache = new Map<string, { rate: number | null; at: number }>()
+async function rateLookup(base: string, currencies: string[]): Promise<(c: string) => number | null> {
+  const need = [...new Set(currencies.filter((c) => c !== base))]
+  await Promise.all(
+    need.map(async (c) => {
+      const key = `${c}>${base}`
+      const hit = fxCache.get(key)
+      if (hit && Date.now() - hit.at < 3_600_000) return
+      fxCache.set(key, { rate: await fetchFxRate(c, base, AbortSignal.timeout(5000)), at: Date.now() })
+    }),
+  )
+  return (c) => (c === base ? 1 : (fxCache.get(`${c}>${base}`)?.rate ?? null))
+}
+
+/** Results in the trip's base currency for display (converted where the provider can't quote it). */
+async function inBase<T extends { priceMinor: number; currency: string }>(list: T[], base: string) {
+  return withDisplayPrice(list, base, await rateLookup(base, list.map((x) => x.currency)))
+}
+
 /** Spread adults over rooms as evenly as possible (RouteStack wants one entry per room). */
 function occupancy(adults: number, rooms: number) {
   return Array.from({ length: rooms }, (_, i) => ({ adults: Math.floor(adults / rooms) + (i < adults % rooms ? 1 : 0), children: 0, childAges: [] as number[] }))
@@ -142,6 +164,7 @@ function checkoutBody(kind: 'flight' | 'hotel' | 'activity', ref: J): { path: st
       travelDate: ref.travelDate,
       startTime: ref.startTime ?? undefined,
       adults: ref.adults,
+      currency: ref.currency,
       ageBands: [{ ageBand: 'ADULT', numberOfTravelers: ref.adults }],
     },
   }
@@ -181,7 +204,7 @@ export const booking = onCall({ secrets: [API_KEY, API_SECRET], timeoutSeconds: 
         page: 1,
         limit: 20,
       }
-      return { flights: normalizeFlights(await rs('/mcp/flight/search', search), search) }
+      return { flights: await inBase(normalizeFlights(await rs('/mcp/flight/search', search), search), currency) }
     }
     case 'hotels': {
       const rooms = occupancy(input.adults, Math.min(input.rooms, input.adults))
@@ -198,7 +221,7 @@ export const booking = onCall({ secrets: [API_KEY, API_SECRET], timeoutSeconds: 
         page: 1,
         limit: 20,
       }
-      return { hotels: normalizeHotels(await rs('/mcp/hotel/search-hotels', search), search) }
+      return { hotels: await inBase(normalizeHotels(await rs('/mcp/hotel/search-hotels', search), search), currency) }
     }
     case 'hotelRooms': {
       const h = input.hotel
@@ -212,14 +235,16 @@ export const booking = onCall({ secrets: [API_KEY, API_SECRET], timeoutSeconds: 
         correlationId: h.correlationId,
         currency: h.currency,
       })
-      return { rooms: normalizeRooms(res, h) }
+      return { rooms: await inBase(normalizeRooms(res, h), currency) }
     }
     case 'activities': {
       const res = await rs('/mcp/activity/search-v2', {
         filtering: { destination: input.destinationId, locationName: input.locationName, startDate: input.date },
         pagination: { start: 1, count: 20 },
+        // Activities can be quoted in the trip currency directly.
+        currency,
       })
-      return { activities: normalizeActivities(res) }
+      return { activities: await inBase(normalizeActivities(res), currency) }
     }
     case 'activityOptions': {
       // Availability has prices and times; details names the options and gives the cancellation policy.
@@ -228,12 +253,16 @@ export const booking = onCall({ secrets: [API_KEY, API_SECRET], timeoutSeconds: 
           activityCode: input.activityCode,
           travelDate: input.date,
           ageBands: [{ ageBand: 'ADULT', numberOfTravelers: input.adults }],
+          currency,
         }),
         rs('/mcp/activity/details', { activityCode: input.activityCode, startDate: input.date, endDate: input.date }).catch(() => null),
       ])
       return {
         cancellation: activityCancellation(details),
-        options: normalizeActivityOptions(res, details).map((o) => ({ ...o, ref: { activityCode: input.activityCode, gradeCode: o.gradeCode, travelDate: input.date, adults: input.adults } })),
+        options: (await inBase(normalizeActivityOptions(res, details), currency)).map((o) => ({
+          ...o,
+          ref: { activityCode: input.activityCode, gradeCode: o.gradeCode, travelDate: input.date, adults: input.adults, currency },
+        })),
       }
     }
     case 'checkout': {

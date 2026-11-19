@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkoutUrl, normalizeActivities, normalizeActivityOptions, normalizeFlights, normalizeHotels, normalizePlaces, normalizeRooms, priceToMinor } from './booking'
+import { withDisplayPrice, checkoutUrl, normalizeActivities, normalizeActivityOptions, normalizeFlights, normalizeHotels, normalizePlaces, normalizeRooms, priceToMinor } from './booking'
 
 // Trimmed from RouteStack's documented examples (mcp.routestack.ai/openapi.yaml).
 const flightRes = {
@@ -106,5 +106,21 @@ describe('booking normalisers', () => {
     expect(checkoutUrl({ checkoutMode: 'deeplink', url: 'https://portal.example/checkout/1' })).toBe('https://portal.example/checkout/1')
     expect(checkoutUrl({ checkoutMode: 'acp', session: { id: 'cs_1' } })).toBeNull()
     expect(checkoutUrl({ url: 'javascript:alert(1)' })).toBeNull()
+  })
+
+  it('shows prices in the trip currency, marking converted ones', () => {
+    const rates: Record<string, number> = { USD: 1.4912 }
+    const out = withDisplayPrice(
+      [
+        { priceMinor: 94603, currency: 'USD' },
+        { priceMinor: 45507, currency: 'AUD' },
+        { priceMinor: 1000, currency: 'EUR' }, // no rate available: left as is
+      ],
+      'AUD',
+      (c) => rates[c] ?? null,
+    )
+    expect(out[0]!.display).toEqual({ priceMinor: 141072, currency: 'AUD', approximate: true })
+    expect(out[1]!.display).toEqual({ priceMinor: 45507, currency: 'AUD', approximate: false })
+    expect(out[2]!.display).toEqual({ priceMinor: 1000, currency: 'EUR', approximate: false })
   })
 })

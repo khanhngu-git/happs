@@ -8,10 +8,12 @@ import { Label } from '@/components/ui/label'
 import { useTrip } from '@/features/trips/TripContext'
 import { api, callableMessage } from '@/lib/functions'
 import type { Item } from '@/lib/firestore'
-import { formatMoney } from '@/shared/money'
-import type { HotelOffer, HotelRoom, PlaceOption } from '@/shared/booking'
+import type { DisplayPrice, HotelOffer, HotelRoom, PlaceOption } from '@/shared/booking'
+
+type Priced<T> = T & { display: DisplayPrice }
 import { PlaceField } from './PlaceField'
-import { BookActions, ResultsState, Stepper } from './shared'
+import { BookActions, Price, ResultsState, Stepper } from './shared'
+import { priceLabel } from './price'
 import { addStay } from './addToItinerary'
 
 export function HotelPanel({ items, onDone }: { items: Item[]; onDone(): void }) {
@@ -23,10 +25,10 @@ export function HotelPanel({ items, onDone }: { items: Item[]; onDone(): void })
   const [rooms, setRooms] = useState(Math.max(1, Math.ceil(members.length / 2)))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [results, setResults] = useState<HotelOffer[] | null>(null)
-  const [hotel, setHotel] = useState<HotelOffer | null>(null)
-  const [roomList, setRoomList] = useState<HotelRoom[] | null>(null)
-  const [room, setRoom] = useState<HotelRoom | null>(null)
+  const [results, setResults] = useState<Priced<HotelOffer>[] | null>(null)
+  const [hotel, setHotel] = useState<Priced<HotelOffer> | null>(null)
+  const [roomList, setRoomList] = useState<Priced<HotelRoom>[] | null>(null)
+  const [room, setRoom] = useState<Priced<HotelRoom> | null>(null)
 
   /** RouteStack areas are Google place ids without coordinates; fetch them from Google Places. */
   async function pickPlace(p: PlaceOption | null) {
@@ -63,7 +65,7 @@ export function HotelPanel({ items, onDone }: { items: Item[]; onDone(): void })
     }
   }
 
-  async function openHotel(h: HotelOffer) {
+  async function openHotel(h: Priced<HotelOffer>) {
     setHotel(h)
     setRoomList(null)
     setBusy(true)
@@ -101,7 +103,7 @@ export function HotelPanel({ items, onDone }: { items: Item[]; onDone(): void })
           {room.board && ` · ${room.board}`}
           {room.refundable && ' · free cancellation'}
         </p>
-        <BookActions kind="hotel" bookRef={room.ref} priceLabel={formatMoney(room.priceMinor, room.currency)} onAdd={add} />
+        <BookActions kind="hotel" bookRef={room.ref} priceLabel={priceLabel(room)} onAdd={add} />
       </div>
     )
   }
@@ -129,7 +131,7 @@ export function HotelPanel({ items, onDone }: { items: Item[]; onDone(): void })
                       {r.refundable && <Badge variant="success">Free cancellation</Badge>}
                     </span>
                   </span>
-                  <span className="font-semibold tabular-nums">{formatMoney(r.priceMinor, r.currency)}</span>
+                  <Price item={r} />
                 </button>
               </li>
             ))}
@@ -180,9 +182,7 @@ export function HotelPanel({ items, onDone }: { items: Item[]; onDone(): void })
                       )}
                       {h.rating !== null && ` · ${h.rating}${h.reviewCount ? ` (${h.reviewCount})` : ''}`}
                     </span>
-                    <span className="block pt-1 font-semibold tabular-nums">
-                      {formatMoney(h.priceMinor, h.currency)} <span className="text-[0.8125rem] font-normal text-muted-foreground">total stay</span>
-                    </span>
+                    <Price item={h} suffix="total stay" className="items-start pt-1 text-left" />
                   </span>
                 </button>
               </li>

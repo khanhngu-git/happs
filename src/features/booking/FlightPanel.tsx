@@ -10,9 +10,12 @@ import { api, callableMessage } from '@/lib/functions'
 import type { Item } from '@/lib/firestore'
 import { formatMoney } from '@/shared/money'
 import { formatShortDate, formatTime } from '@/shared/dates'
-import type { FlightLeg, FlightOffer, PlaceOption } from '@/shared/booking'
+import type { DisplayPrice, FlightLeg, FlightOffer, PlaceOption } from '@/shared/booking'
+
+type Priced<T> = T & { display: DisplayPrice }
 import { PlaceField } from './PlaceField'
-import { BookActions, ResultsState, Stepper } from './shared'
+import { BookActions, Price, ResultsState, Stepper } from './shared'
+import { priceLabel } from './price'
 import { addFlight } from './addToItinerary'
 
 const hm = (min: number) => `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, '0')}m`
@@ -53,8 +56,8 @@ export function FlightPanel({ items, onDone }: { items: Item[]; onDone(): void }
   const [adults, setAdults] = useState(Math.max(1, members.length))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [results, setResults] = useState<FlightOffer[] | null>(null)
-  const [picked, setPicked] = useState<FlightOffer | null>(null)
+  const [results, setResults] = useState<Priced<FlightOffer>[] | null>(null)
+  const [picked, setPicked] = useState<Priced<FlightOffer> | null>(null)
 
   async function search() {
     if (!from || !to) return setError('Choose where you’re flying from and to.')
@@ -95,6 +98,11 @@ export function FlightPanel({ items, onDone }: { items: Item[]; onDone(): void }
             </ol>
           </section>
         ))}
+        {picked.display.approximate && (
+          <p className="rounded-2xl bg-foreground/[0.05] px-4 py-3 text-[0.875rem]">
+            Airlines quote this fare in {picked.currency}. Checkout charges {formatMoney(picked.priceMinor, picked.currency)}; {priceLabel(picked)} is today’s rate.
+          </p>
+        )}
         <p className="text-[0.875rem] text-muted-foreground">
           {picked.cabin}
           {picked.baggage && ` · checked bag ${picked.baggage}`}
@@ -103,7 +111,7 @@ export function FlightPanel({ items, onDone }: { items: Item[]; onDone(): void }
         <BookActions
           kind="flight"
           bookRef={picked.ref}
-          priceLabel={formatMoney(picked.priceMinor, picked.currency)}
+          priceLabel={priceLabel(picked)}
           onAdd={async () => {
             await addFlight(trip, me, items, picked).then(
               () => {
@@ -154,7 +162,7 @@ export function FlightPanel({ items, onDone }: { items: Item[]; onDone(): void }
                     <span className="flex items-center gap-2">
                       <Plane className="size-4 shrink-0 text-sky-600 dark:text-sky-400" aria-hidden />
                       <span className="min-w-0 flex-1 truncate text-[0.875rem] text-muted-foreground">{f.legs[0]!.airline}</span>
-                      <span className="text-[1.0625rem] font-semibold tabular-nums">{formatMoney(f.priceMinor, f.currency)}</span>
+                      <Price item={f} className="text-[1.0625rem]" />
                     </span>
                     {journeys(f).map((j) => (
                       <Summary key={j.label} legs={j.legs} />
