@@ -3,16 +3,15 @@ import { Loader2, MapPin, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { api, callableMessage } from '@/lib/functions'
-import type { BookingKind, PlaceOption } from '@/shared/booking'
+import type { PlaceOption } from '@/shared/activityFinder'
 
 /**
- * Airport / destination autocomplete backed by RouteStack. Debounced and
+ * Destination autocomplete (cities, regions) backed by RouteStack. Debounced and
  * 3+ characters only, because every lookup spends a provider search token.
  */
 export function PlaceField({
   id,
   label,
-  kind,
   tripId,
   value,
   onChange,
@@ -21,7 +20,6 @@ export function PlaceField({
 }: {
   id: string
   label: string
-  kind: BookingKind
   tripId: string
   value: PlaceOption | null
   onChange(p: PlaceOption | null): void
@@ -41,7 +39,7 @@ export function PlaceField({
     const t = setTimeout(async () => {
       setBusy(true)
       try {
-        const res = await api.booking({ action: 'places', tripId, kind, term: text.trim() })
+        const res = await api.activityFinder({ action: 'places', tripId, term: text.trim() })
         if (!cancelled) {
           setResults(res.places ?? [])
           setError(null)
@@ -56,7 +54,7 @@ export function PlaceField({
       cancelled = true
       clearTimeout(t)
     }
-  }, [text, value, kind, tripId])
+  }, [text, value, tripId])
 
   if (value) {
     return (

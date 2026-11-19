@@ -1,4 +1,4 @@
-import type { DisplayPrice } from '@/shared/booking'
+import type { DisplayPrice } from '@/shared/activityFinder'
 import { formatMoney } from '@/shared/money'
 
 /** Short label for buttons: base-currency price, prefixed with ≈ if converted. */
