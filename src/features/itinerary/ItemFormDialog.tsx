@@ -15,7 +15,6 @@ import { CostFields } from '@/features/expenses/CostFields'
 import { draftFromCost, emptyDraft, validateDraft, type CostDraft } from '@/features/expenses/costDraft'
 import { SharesLockedError } from '@/features/expenses/expenseApi'
 import type { Expense, Item } from '@/lib/firestore'
-import type { ItemPrefill } from './prefill'
 import { cn } from '@/lib/utils'
 import { ITEM_TYPES, type ItemType } from '@/shared/itinerary'
 import { isDateString, isTimeString } from '@/shared/dates'
@@ -50,7 +49,6 @@ export function ItemFormDialog({
   onOpenChange,
   item,
   linkedExpense,
-  prefill = null,
   defaultDate,
   nextOrder,
 }: {
@@ -58,29 +56,26 @@ export function ItemFormDialog({
   onOpenChange(o: boolean): void
   item: Item | null
   linkedExpense: Expense | null
-  /** Values for a new item, e.g. from the activity finder. Ignored when editing. */
-  prefill?: ItemPrefill | null
   defaultDate: string
   nextOrder: number
 }) {
   const { trip, me, members } = useTrip()
-  const pre = item ? null : prefill
-  const [location, setLocation] = useState<Location | null>(item?.location ?? pre?.location ?? null)
-  const [hasCost, setHasCost] = useState(!!linkedExpense || !!pre?.cost)
+  const [location, setLocation] = useState<Location | null>(item?.location ?? null)
+  const [hasCost, setHasCost] = useState(!!linkedExpense)
   const [draft, setDraft] = useState<CostDraft>(() =>
-    linkedExpense ? draftFromCost(linkedExpense) : pre?.cost ? draftFromCost(pre.cost) : emptyDraft({ currency: trip.baseCurrency, paidBy: me, memberIds: members.map((m) => m.id) }),
+    linkedExpense ? draftFromCost(linkedExpense) : emptyDraft({ currency: trip.baseCurrency, paidBy: me, memberIds: members.map((m) => m.id) }),
   )
   const [costError, setCostError] = useState<string | null>(null)
   // Photo: a new File to upload, null to remove, undefined to keep what's there.
   const [photo, setPhoto] = useState<File | null | undefined>(undefined)
-  const [preview, setPreview] = useState<string | null>(item?.photoURL ?? pre?.photoURL ?? null)
+  const [preview, setPreview] = useState<string | null>(item?.photoURL ?? null)
   useEffect(() => {
     if (!photo) return
     const url = URL.createObjectURL(photo)
     setPreview(url)
     return () => URL.revokeObjectURL(url)
   }, [photo])
-  const [more, setMore] = useState(!!(item?.notes || item?.bookingUrl || item?.bookingRef || linkedExpense || pre))
+  const [more, setMore] = useState(!!(item?.notes || item?.bookingUrl || item?.bookingRef || linkedExpense))
 
   const form = useForm<Values>({ resolver: zodResolver(schema) })
   const { errors, isSubmitting } = form.formState
@@ -90,23 +85,23 @@ export function ItemFormDialog({
   useEffect(() => {
     if (!open) return
     form.reset({
-      type: item?.type ?? pre?.type ?? 'activity',
-      title: item?.title ?? pre?.title ?? '',
-      date: item?.checkIn?.date ?? item?.date ?? pre?.date ?? defaultDate,
-      startTime: (item?.type === 'stay' ? item.checkIn?.time : item?.startTime) ?? pre?.startTime ?? '',
+      type: item?.type ?? 'activity',
+      title: item?.title ?? '',
+      date: item?.checkIn?.date ?? item?.date ?? defaultDate,
+      startTime: (item?.type === 'stay' ? item.checkIn?.time : item?.startTime) ?? '',
       endTime: item?.endTime ?? '',
       checkOutDate: item?.checkOut?.date ?? '',
       checkOutTime: item?.checkOut?.time ?? '',
-      notes: item?.notes ?? pre?.notes ?? '',
+      notes: item?.notes ?? '',
       bookingUrl: item?.bookingUrl ?? '',
       bookingRef: item?.bookingRef ?? '',
     })
-    setLocation(item?.location ?? pre?.location ?? null)
-    setHasCost(!!linkedExpense || !!pre?.cost)
-    setDraft(linkedExpense ? draftFromCost(linkedExpense) : pre?.cost ? draftFromCost(pre.cost) : emptyDraft({ currency: trip.baseCurrency, paidBy: me, memberIds: members.map((m) => m.id) }))
+    setLocation(item?.location ?? null)
+    setHasCost(!!linkedExpense)
+    setDraft(linkedExpense ? draftFromCost(linkedExpense) : emptyDraft({ currency: trip.baseCurrency, paidBy: me, memberIds: members.map((m) => m.id) }))
     setCostError(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, item?.id, linkedExpense?.id, pre])
+  }, [open, item?.id, linkedExpense?.id])
 
   const submit = form.handleSubmit(async (v) => {
     let cost = null
@@ -121,11 +116,10 @@ export function ItemFormDialog({
     const stay = v.type === 'stay'
     try {
       const id = item?.id ?? newItemId(trip.id)
-      // A finder photo is a provider image URL; it's kept as is unless replaced.
-      let photoURL = item?.photoURL ?? pre?.photoURL ?? null
+      let photoURL = item?.photoURL ?? null
       if (photo) photoURL = await uploadItemPhoto(trip.id, id, photo, item?.photoURL)
-      else if (photo === null) {
-        if (item?.photoURL) await removeByUrl(item.photoURL)
+      else if (photo === null && item?.photoURL) {
+        await removeByUrl(item.photoURL)
         photoURL = null
       }
       await saveItem({

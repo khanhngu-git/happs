@@ -47,8 +47,7 @@ test('activity photo shows in the day view, and Today brings you back', async ({
   await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible()
 
   // Add an activity with a photo; the row shows the photo thumbnail.
-  await page.getByRole('button', { name: 'Add to the plan' }).click()
-  await page.getByRole('button', { name: /Add your own/ }).click()
+  await page.getByRole('button', { name: 'Add activity' }).click()
   await page.getByPlaceholder('The Bund at night').fill('Sunset walk')
   await page.getByLabel('Add a photo').setInputFiles(IMAGE)
   await expect(page.getByRole('img', { name: 'Activity photo' })).toBeVisible()

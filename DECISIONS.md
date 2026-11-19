@@ -74,12 +74,3 @@ The `liquid-glass` skill (github.com/heyparsadev/liquid-glass-skill) targets Swi
 ## Test isolation
 - `npm run test:rules` and `npm run test:e2e` start their own emulators on separate ports (`firebase.rules-test.json`, `firebase.e2e.json`). E2E runs its own dev server on :5174 with the Auth emulator forced on. Tests can't create real accounts, even when your dev setup uses real Google sign-in, and they don't disturb your dev emulators.
 - **Per-suite emulator temp dirs.** The Storage emulator stores blobs in `$TMPDIR/firebase/storage/blobs` and removes the folder on shutdown. Dev, rules-test and e2e suites shared it, so a finished test run deleted the dev suite's blob folder, and the next upload crashed it (`ENOENT` in `persistence.appendBytes`). Every npm emulator script now sets its own `TMPDIR` under `.emulator-tmp/`.
-
-## Activity finder via RouteStack (booking removed)
-- **No booking in the app.** RouteStack helps people *add* real activities to the itinerary with price, location and cover image. Checkout, flights and hotels were removed. People book wherever they like; the itinerary records what they're doing.
-- **Where:** the itinerary's **+** → **Find an activity**. Search by name (`filtering.searchTerm`) within a destination, which starts at the trip's destination and can be changed or cleared. With no destination, RouteStack matches activity names globally.
-- **Prefill, not auto-save.** Choosing an option and time opens the normal activity form, prefilled with title, date, start time, location, photo, notes (option, summary, cancellation policy) and the price as a cost (paid by you, split equally between members). The person reviews and saves, so no expense is created by surprise.
-- **Location** comes from the activity details' meeting point (`logistics.start[].location`: name, address, Google place id, coordinates), so finder activities appear on the map.
-- **Prices** are requested in the trip's base currency (RouteStack honours `currency` for activities). Anything still quoted in another currency is converted with the day's ECB rate and marked "≈".
-- **Server-side only:** `activityFinder` callable; partner token cached per instance; only trip members can search because each search spends a token. The keys provided are live keys (`mcp.routestack.ai`); local dev points there via the git-ignored `functions/.env.local`.
-- **Trains, flights, hotels:** not part of the finder.

@@ -5,7 +5,6 @@ import { useExpenses } from '@/features/expenses/expenseApi'
 import type { Item } from '@/lib/firestore'
 import { ItemFormDialog } from './ItemFormDialog'
 import { ItemSheet } from './ItemSheet'
-import type { ItemPrefill } from './prefill'
 
 /**
  * Item detail sheet (?item=id) and the add/edit form, shared by the day view
@@ -19,7 +18,6 @@ export function useItineraryDialogs(items: Item[]) {
   const [formKey, setFormKey] = useState(0)
   const [formDate, setFormDate] = useState(trip.startDate)
   const [editing, setEditing] = useState<Item | null>(null)
-  const [prefill, setPrefill] = useState<ItemPrefill | null>(null)
   const expensesById = useMemo(() => new Map(expenses.map((e) => [e.id, e])), [expenses])
   const openItem = items.find((i) => i.id === params.get('item')) ?? null
   const nextOrder = Math.max(0, ...items.map((i) => i.order)) + 1000
@@ -35,9 +33,8 @@ export function useItineraryDialogs(items: Item[]) {
       { replace: true },
     )
 
-  const openForm = (item: Item | null, date: string, pre: ItemPrefill | null = null) => {
+  const openForm = (item: Item | null, date: string) => {
     setEditing(item)
-    setPrefill(pre)
     setFormDate(date)
     setFormKey((k) => k + 1)
     setFormOpen(true)
@@ -51,7 +48,6 @@ export function useItineraryDialogs(items: Item[]) {
         onOpenChange={setFormOpen}
         item={editing}
         linkedExpense={editing?.linkedExpenseId ? (expensesById.get(editing.linkedExpenseId) ?? null) : null}
-        prefill={prefill}
         defaultDate={formDate}
         nextOrder={nextOrder}
       />
@@ -67,10 +63,5 @@ export function useItineraryDialogs(items: Item[]) {
     </>
   )
 
-  return {
-    dialogs,
-    openItem: (i: Item) => setItemParam(i.id),
-    addItem: (date: string) => openForm(null, date),
-    addPrefilled: (p: ItemPrefill) => openForm(null, p.date, p),
-  }
+  return { dialogs, openItem: (i: Item) => setItemParam(i.id), addItem: (date: string) => openForm(null, date) }
 }

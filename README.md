@@ -85,26 +85,6 @@ The client config for project `happss` goes in `.env.local` (see `.env.example`)
 
 Never commit service account keys. The Admin SDK key isn't needed for any of the above: deployed functions use their default service account, and local dev uses the emulators.
 
-## Activity finder (RouteStack)
-
-The itinerary's **+** → **Find an activity** searches real tours, tickets and experiences through [RouteStack](https://routestack.ai), by name ("teamLab", "sushi class") and/or place. Picking one and a time prefills the normal activity form with:
-- the title, date and start time
-- the meeting point (name, address and coordinates, so it appears on the map)
-- a cover photo
-- the price as a shared cost, in the trip's base currency, paid by you and split equally
-
-You can edit anything before saving. There's no booking or checkout in the app.
-
-- Credentials live only in Cloud Functions (`functions/src/activityFinder.ts`), which exchanges the API key plus an HMAC signed with the secret for a short-lived partner token.
-- **Local:** put the key and secret in `functions/.secret.local` (git-ignored):
-  ```
-  ROUTESTACK_API_KEY=...
-  ROUTESTACK_API_SECRET=...
-  ```
-  `functions/.env` sets `ROUTESTACK_HOST` (sandbox by default). Live keys only work on `https://mcp.routestack.ai`, so set that in `functions/.env.local` when using them.
-- **Deploy:** `firebase functions:secrets:set ROUTESTACK_API_KEY` and `firebase functions:secrets:set ROUTESTACK_API_SECRET`.
-- Each search spends a RouteStack token. Place autocomplete waits for 3+ characters and a short pause, and only trip members can search.
-
 ## How the money works
 
 - Amounts are **integers in minor units** (cents, fen, yen). `src/shared/money.ts` parses user input with string arithmetic. Floats appear only transiently when applying an FX rate, and the result is rounded straight back to an integer.

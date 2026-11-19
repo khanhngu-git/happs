@@ -23,7 +23,3 @@ emulator-data-real/
 # Never commit service account keys
 *adminsdk*.json
 service-account*.json
-
-# Cloud Functions secrets for the emulator (never commit)
-functions/.secret.local
-functions/.env.local
