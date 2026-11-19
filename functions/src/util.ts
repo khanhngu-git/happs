@@ -1,4 +1,4 @@
-import { HttpsError } from 'firebase-functions/v2/https'
+import { HttpsError, type CallableOptions } from 'firebase-functions/v2/https'
 import type { z } from 'zod'
 import { db } from './admin'
 
@@ -35,3 +35,10 @@ export function inviteProblem(invite: FirebaseFirestore.DocumentData, now = Date
   if (typeof invite.maxUses === 'number' && (invite.uses ?? 0) >= invite.maxUses) return 'This invite link has been used up.'
   return null
 }
+
+/**
+ * Options for every callable. Set ENFORCE_APP_CHECK=true in functions/.env once
+ * App Check is registered and the web app sends tokens (VITE_APPCHECK_SITE_KEY):
+ * calls from scripts outside the app are then rejected.
+ */
+export const callableOptions: CallableOptions = { enforceAppCheck: process.env.ENFORCE_APP_CHECK === 'true' }

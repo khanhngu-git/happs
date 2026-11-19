@@ -1,9 +1,10 @@
 import { useNavigate } from 'react-router'
-import { CalendarDays, ExternalLink, X } from 'lucide-react'
+import { CalendarDays, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTrip } from '@/features/trips/TripContext'
 import { formatShortDate } from '@/shared/dates'
-import { googleMapsUrl, timeLabel } from '@/features/itinerary/format'
+import { timeLabel } from '@/features/itinerary/format'
+import { RouteActions } from '@/features/itinerary/RouteActions'
 import { ItemTypeIcon } from '@/features/itinerary/ItemTypeIcon'
 import type { MapStop } from './mapData'
 
@@ -25,22 +26,21 @@ export function StopCard({ stop, onClose }: { stop: MapStop; onClose(): void }) 
           <p className="text-sm">
             {formatShortDate(item.date)} · {timeLabel(item)}
           </p>
+          {item.location?.localName && item.location.localName !== item.title && (
+            <p className="truncate text-sm font-medium" lang="zh-CN">
+              {item.location.localName}
+            </p>
+          )}
           {item.location?.address && <p className="truncate text-sm">{item.location.address}</p>}
         </div>
         <button type="button" onClick={onClose} className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-foreground/8" aria-label="Close">
           <X className="size-4" />
         </button>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <Button asChild variant="secondary">
-          <a href={googleMapsUrl(item.location!)} target="_blank" rel="noreferrer">
-            <ExternalLink /> Google Maps
-          </a>
-        </Button>
-        <Button onClick={() => navigate(`/trips/${trip.id}/itinerary?day=${item.date}&item=${item.id}`)}>
-          <CalendarDays /> In itinerary
-        </Button>
-      </div>
+      <RouteActions to={item.location!} className="mt-3" />
+      <Button variant="ghost" className="mt-1 w-full text-primary" onClick={() => navigate(`/trips/${trip.id}/itinerary?day=${item.date}&item=${item.id}`)}>
+        <CalendarDays /> In itinerary
+      </Button>
     </div>
   )
 }

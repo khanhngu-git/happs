@@ -1,6 +1,6 @@
 import { lazy, Suspense, useMemo } from 'react'
 import { useSearchParams } from 'react-router'
-import { MapPinned } from 'lucide-react'
+import { MapPinned, MapPinPlus } from 'lucide-react'
 import { EmptyState } from '@/components/EmptyState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useTrip } from '@/features/trips/TripContext'
@@ -8,6 +8,7 @@ import { useItems } from '@/features/itinerary/itineraryApi'
 import { ITEM_TYPE_META } from '@/features/itinerary/itemTypes'
 import { ItemTypeIcon } from '@/features/itinerary/ItemTypeIcon'
 import { timeLabel } from '@/features/itinerary/format'
+import { useItineraryDialogs } from '@/features/itinerary/ItineraryDialogs'
 import { hasMaps } from '@/lib/maps'
 import { cn } from '@/lib/utils'
 import { formatShortDate, tripDays } from '@/shared/dates'
@@ -37,6 +38,7 @@ export function MapTab() {
   const { trip } = useTrip()
   const [params, setParams] = useSearchParams()
   const { data: items, loading } = useItems(trip.id)
+  const { dialogs, editItem } = useItineraryDialogs(items)
   const days = useMemo(() => tripDays(trip.startDate, trip.endDate), [trip.startDate, trip.endDate])
   const day = days.includes(params.get('day') ?? '') ? params.get('day') : null
   // One type at a time (or all), like the day filter.
@@ -106,9 +108,33 @@ export function MapTab() {
   )
 
   if (!loading && items.every((i) => i.location?.lat == null)) {
+    const unpinned = [...items].sort((a, b) => a.date.localeCompare(b.date) || (a.startTime ?? '').localeCompare(b.startTime ?? ''))
     return (
-      <main className="mx-auto max-w-2xl px-4 pt-4">
-        <EmptyState icon={<MapPinned />} title="Nothing on the map yet" description="Add a location to a plan or stay and it will show up here." />
+      <main className="mx-auto max-w-2xl px-4 pt-4 pb-28">
+        <EmptyState
+          icon={<MapPinned />}
+          title="Nothing on the map yet"
+          description={unpinned.length ? 'Search for a place on any plan below and it will be pinned here.' : 'Add plans with a place in the Itinerary and they will show up here.'}
+        />
+        {unpinned.length > 0 && (
+          <ul className="mt-4 divide-y divide-border/70 overflow-hidden rounded-[1.25rem] bg-card ring-1 ring-border/70">
+            {unpinned.map((it) => (
+              <li key={it.id} className="flex min-h-14 items-center gap-3 px-3 py-2">
+                <ItemTypeIcon type={it.type} className="size-9" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">{it.title}</span>
+                  <span className="block truncate text-sm text-muted-foreground">
+                    {formatShortDate(it.date)} · {it.location?.name ? `${it.location.name} (not pinned)` : timeLabel(it)}
+                  </span>
+                </span>
+                <button type="button" onClick={() => editItem(it)} className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-primary/10 px-3 text-sm font-semibold text-primary">
+                  <MapPinPlus className="size-4" aria-hidden /> Add location
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {dialogs}
       </main>
     )
   }

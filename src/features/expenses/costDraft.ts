@@ -3,7 +3,7 @@
  * Inputs are kept as strings while typing and converted to integer minor
  * units (or basis points) only on validation.
  */
-import { minorToInputString, parseDecimalToMinor, parseToMinor } from '@/shared/money'
+import { formatMoney, minorToInputString, parseDecimalToMinor, parseToMinor } from '@/shared/money'
 import { computeSplit, FULL_PERCENT_BPS, SplitError, type Allocation, type SplitMethod } from '@/shared/split'
 import type { ItemCost } from './expenseApi'
 
@@ -43,6 +43,7 @@ export type DraftResult = { ok: true; cost: ItemCost; allocation: Allocation } |
 export function validateDraft(d: CostDraft, baseCurrency: string): DraftResult {
   const amountMinor = parseToMinor(d.amount, d.currency)
   if (amountMinor === null || amountMinor < 0) return { ok: false, error: 'Enter a valid amount' }
+  if (amountMinor === 0) return { ok: false, error: 'Enter an amount above zero' }
   const fx = d.currency === baseCurrency ? 1 : Number(d.fxRate)
   if (!(fx > 0) || !Number.isFinite(fx)) return { ok: false, error: `Enter the exchange rate to ${baseCurrency}` }
   if (d.participantIds.length === 0) return { ok: false, error: 'Pick at least one person to split with' }
@@ -61,7 +62,15 @@ export function validateDraft(d: CostDraft, baseCurrency: string): DraftResult {
   try {
     return { ok: true, cost, allocation: computeSplit(cost) }
   } catch (err) {
-    if (err instanceof SplitError) return { ok: false, error: err.message }
+    if (err instanceof SplitError) {
+      // Show money, not minor units ("A$800.00 of A$900.00", not "80000 / 90000").
+      if (err.mismatch) {
+        const { sum, total } = err.mismatch
+        const diff = formatMoney(Math.abs(total - sum), d.currency)
+        return { ok: false, error: `The amounts add up to ${formatMoney(sum, d.currency)}, not ${formatMoney(total, d.currency)} (${diff} ${sum < total ? 'still to assign' : 'too much'})` }
+      }
+      return { ok: false, error: err.message }
+    }
     throw err
   }
 }

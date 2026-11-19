@@ -11,21 +11,23 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { FieldError } from '@/features/auth/AuthLayout'
 import { useTrip } from '@/features/trips/TripContext'
-import { CostFields } from '@/features/expenses/CostFields'
+import { CostFields, useCostLocked } from '@/features/expenses/CostFields'
 import { draftFromCost, emptyDraft, validateDraft, type CostDraft } from '@/features/expenses/costDraft'
 import { SharesLockedError } from '@/features/expenses/expenseApi'
 import type { Expense, Item } from '@/lib/firestore'
 import type { ItemPrefill } from './prefill'
 import { cn } from '@/lib/utils'
-import { ITEM_TYPES, type ItemType } from '@/shared/itinerary'
-import { isDateString, isTimeString } from '@/shared/dates'
-import type { Location } from '@/shared/schemas'
+import { findOverlaps, ITEM_TYPES, type ItemType } from '@/shared/itinerary'
+import { formatShortDate, formatTime, isDateString, isTimeString } from '@/shared/dates'
+import { MAX_ATTACHMENTS, type Attachment, type Location } from '@/shared/schemas'
 import { ITEM_TYPE_META } from './itemTypes'
 import { PlacePicker } from './PlacePicker'
+import { usePlaceBias } from './placeBias'
+import { isMainlandChina } from './routes'
 import { newItemId, saveItem } from './itineraryApi'
-import { removeByUrl, uploadItemPhoto } from '@/lib/uploads'
+import { removeByUrl, uploadItemAttachment, uploadItemPhoto } from '@/lib/uploads'
 import { ImageError } from '@/lib/images'
-import { ImagePlus, X } from 'lucide-react'
+import { FileText, ImagePlus, Loader2, Paperclip, TriangleAlert, X } from 'lucide-react'
 
 const optTime = z.string().refine((v) => v === '' || isTimeString(v), 'Use a time like 09:30')
 const schema = z
@@ -53,6 +55,7 @@ export function ItemFormDialog({
   prefill = null,
   defaultDate,
   nextOrder,
+  items = [],
 }: {
   open: boolean
   onOpenChange(o: boolean): void
@@ -62,15 +65,21 @@ export function ItemFormDialog({
   prefill?: ItemPrefill | null
   defaultDate: string
   nextOrder: number
+  /** The trip's other plans, for overlap warnings and place-search bias. */
+  items?: Item[]
 }) {
   const { trip, me, members } = useTrip()
   const pre = item ? null : prefill
+  const bias = usePlaceBias(items, trip.destination)
+  // A new plan gets its id up front, so it never "overlaps itself" once saved while the sheet closes.
+  const [itemId] = useState(() => item?.id ?? newItemId(trip.id))
   const [location, setLocation] = useState<Location | null>(item?.location ?? pre?.location ?? null)
   const [hasCost, setHasCost] = useState(!!linkedExpense || !!pre?.cost)
   const [draft, setDraft] = useState<CostDraft>(() =>
     linkedExpense ? draftFromCost(linkedExpense) : pre?.cost ? draftFromCost(pre.cost) : emptyDraft({ currency: trip.baseCurrency, paidBy: me, memberIds: members.map((m) => m.id) }),
   )
   const [costError, setCostError] = useState<string | null>(null)
+  const costLocked = useCostLocked(trip.id, linkedExpense?.id)
   // Photo: a new File to upload, null to remove, undefined to keep what's there.
   const [photo, setPhoto] = useState<File | null | undefined>(undefined)
   const [preview, setPreview] = useState<string | null>(item?.photoURL ?? pre?.photoURL ?? null)
@@ -80,11 +89,35 @@ export function ItemFormDialog({
     setPreview(url)
     return () => URL.revokeObjectURL(url)
   }, [photo])
-  const [more, setMore] = useState(!!(item?.notes || item?.bookingUrl || item?.bookingRef || linkedExpense || pre))
+  const [more, setMore] = useState(!!(item?.notes || item?.bookingUrl || item?.bookingRef || item?.attachments?.length || linkedExpense || pre))
+  // Tickets and confirmations. Removed files are deleted from storage only after a successful save.
+  const [attachments, setAttachments] = useState<Attachment[]>(item?.attachments ?? [])
+  const [removedFiles, setRemovedFiles] = useState<string[]>([])
+  const [uploading, setUploading] = useState(false)
+  async function attach(files: FileList | null) {
+    if (!files?.length) return
+    setUploading(true)
+    try {
+      const room = MAX_ATTACHMENTS - attachments.length
+      const added: Attachment[] = []
+      for (const f of Array.from(files).slice(0, room)) added.push(await uploadItemAttachment(trip.id, itemId, f))
+      setAttachments((a) => [...a, ...added])
+      if (files.length > room) toast.warning(`Up to ${MAX_ATTACHMENTS} files per plan.`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Couldn’t upload that file')
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const form = useForm<Values>({ resolver: zodResolver(schema) })
   const { errors, isSubmitting } = form.formState
   const type = form.watch('type')
+  const [wDate, wStart, wEnd] = form.watch(['date', 'startTime', 'endTime'])
+  const overlaps =
+    type === 'stay' || !wStart || !isTimeString(wStart)
+      ? []
+      : findOverlaps(items, { id: itemId, date: wDate, startTime: wStart, endTime: wEnd && isTimeString(wEnd) ? wEnd : null })
 
   // Reset whenever the dialog opens for a different item.
   useEffect(() => {
@@ -109,6 +142,11 @@ export function ItemFormDialog({
   }, [open, item?.id, linkedExpense?.id, pre])
 
   const submit = form.handleSubmit(async (v) => {
+    // Plans outside the trip's days wouldn't show anywhere in the itinerary.
+    if (v.date < trip.startDate || v.date > trip.endDate) {
+      form.setError('date', { message: `Pick a day during the trip (${formatShortDate(trip.startDate)} – ${formatShortDate(trip.endDate)})` })
+      return
+    }
     let cost = null
     if (hasCost) {
       const r = validateDraft(draft, trip.baseCurrency)
@@ -120,7 +158,7 @@ export function ItemFormDialog({
     }
     const stay = v.type === 'stay'
     try {
-      const id = item?.id ?? newItemId(trip.id)
+      const id = itemId
       // A finder photo is a hotel image URL; it's kept as is unless replaced.
       let photoURL = item?.photoURL ?? pre?.photoURL ?? null
       if (photo) photoURL = await uploadItemPhoto(trip.id, id, photo, item?.photoURL)
@@ -148,8 +186,10 @@ export function ItemFormDialog({
           bookingUrl: v.bookingUrl,
           bookingRef: v.bookingRef,
           photoURL,
+          attachments,
         },
       })
+      await Promise.all(removedFiles.map((u) => removeByUrl(u)))
       toast.success(item ? 'Saved' : 'Added')
       onOpenChange(false)
     } catch (err) {
@@ -240,7 +280,7 @@ export function ItemFormDialog({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="item-date">Check in</Label>
-                <Input id="item-date" type="date" {...form.register('date')} />
+                <Input id="item-date" type="date" min={trip.startDate} max={trip.endDate} aria-invalid={!!errors.date} aria-describedby="item-date-error" {...form.register('date')} />
                 <Input aria-label="Check-in time" type="time" {...form.register('startTime')} />
               </div>
               <div className="space-y-2">
@@ -249,6 +289,7 @@ export function ItemFormDialog({
                 <Input aria-label="Check-out time" type="time" {...form.register('checkOutTime')} />
               </div>
               <div className="col-span-2">
+                <FieldError id="item-date-error" message={errors.date?.message} />
                 <FieldError id="item-out-error" message={errors.checkOutDate?.message} />
               </div>
             </div>
@@ -256,7 +297,7 @@ export function ItemFormDialog({
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="item-date">Date</Label>
-                <Input id="item-date" type="date" min={trip.startDate} max={trip.endDate} {...form.register('date')} />
+                <Input id="item-date" type="date" min={trip.startDate} max={trip.endDate} aria-invalid={!!errors.date} aria-describedby="item-date-error" {...form.register('date')} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="item-start">Starts</Label>
@@ -270,15 +311,71 @@ export function ItemFormDialog({
                 Times are in {trip.timeZone.replaceAll('_', ' ')}. Leave blank for “Anytime”.
               </p>
               <div className="col-span-3">
+                <FieldError id="item-date-error" message={errors.date?.message} />
                 <FieldError id="item-end-error" message={errors.endTime?.message} />
               </div>
+              {overlaps.length > 0 && (
+                <p className="col-span-3 flex gap-2 rounded-xl bg-warning/15 p-3 text-sm" role="status">
+                  <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+                  <span>
+                    Overlaps with{' '}
+                    {overlaps
+                      .map((o) => `${o.title} (${formatTime(o.startTime!)}${o.endTime ? ` – ${formatTime(o.endTime)}` : ''})`)
+                      .join(', ')}
+                    . You can still save it.
+                  </span>
+                </p>
+              )}
             </div>
           )}
 
-          <PlacePicker id="item-place" value={location} onChange={setLocation} />
+          <PlacePicker id="item-place" value={location} onChange={setLocation} bias={bias} localLanguage={isMainlandChina(trip.timeZone) ? 'zh-CN' : null} />
 
           {more ? (
             <>
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Tickets and documents</legend>
+            {attachments.length > 0 && (
+              <ul className="divide-y divide-border/70 overflow-hidden rounded-xl bg-card ring-1 ring-input">
+                {attachments.map((a) => (
+                  <li key={a.url} className="flex min-h-11 items-center gap-2 pl-3">
+                    <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                    <span className="min-w-0 flex-1 truncate text-[0.9375rem]">{a.name}</span>
+                    <button
+                      type="button"
+                      className="inline-flex size-11 items-center justify-center rounded-full"
+                      aria-label={`Remove ${a.name}`}
+                      onClick={() => {
+                        setAttachments((x) => x.filter((y) => y.url !== a.url))
+                        setRemovedFiles((r) => [...r, a.url])
+                      }}
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {attachments.length < MAX_ATTACHMENTS && (
+              <label className="flex min-h-11 cursor-pointer items-center gap-2 text-[0.9375rem] font-medium text-primary">
+                {uploading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Paperclip className="size-4" aria-hidden />}
+                {uploading ? 'Uploading…' : 'Attach a ticket or PDF'}
+                <input
+                  type="file"
+                  accept="application/pdf,image/*"
+                  multiple
+                  className="sr-only"
+                  disabled={uploading}
+                  onChange={(e) => {
+                    void attach(e.target.files)
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+            )}
+            <p className="text-sm text-muted-foreground">Boarding passes, QR codes, confirmations. Saved on your phone once opened, so they work offline.</p>
+          </fieldset>
+
           <div className="space-y-2">
             <Label htmlFor="item-notes">Notes</Label>
             <Textarea id="item-notes" rows={3} {...form.register('notes')} />
@@ -301,9 +398,9 @@ export function ItemFormDialog({
                 <span className="block font-medium">Split a cost</span>
                 <span className="block text-sm text-muted-foreground">Shows up in Expenses for everyone</span>
               </span>
-              <Switch checked={hasCost} onCheckedChange={setHasCost} aria-label="This has a cost" />
+              <Switch checked={hasCost} onCheckedChange={setHasCost} disabled={costLocked} aria-label="This has a cost" />
             </label>
-            {hasCost && <CostFields draft={draft} onChange={(d) => { setDraft(d); setCostError(null) }} idPrefix="item-cost" paidByLabel="Who booked it?" />}
+            {hasCost && <CostFields draft={draft} onChange={(d) => { setDraft(d); setCostError(null) }} idPrefix="item-cost" paidByLabel="Who booked it?" locked={costLocked} />}
             {costError && <p className="text-sm text-destructive" role="alert">{costError}</p>}
           </div>
 
@@ -314,7 +411,7 @@ export function ItemFormDialog({
             </button>
           )}
 
-          <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
+          <Button type="submit" size="lg" className="w-full" disabled={isSubmitting || uploading}>
             {isSubmitting ? 'Saving…' : item ? 'Save' : 'Add'}
           </Button>
         </form>

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { CalendarDays, ExternalLink, MapPin, Pencil, Ticket, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { CalendarDays, ExternalLink, FileText, MapPin, Pencil, Ticket, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -10,12 +10,20 @@ import type { Item } from '@/lib/firestore'
 import { formatLongDate } from '@/shared/dates'
 import { ItemTypeIcon } from './ItemTypeIcon'
 import { googleMapsUrl, timeLabel } from './format'
+import { RouteActions } from './RouteActions'
 import { deleteItem } from './itineraryApi'
 
 /** Activity details: when, where, notes and booking. Costs live in Expenses. */
 export function ItemSheet({ item, onOpenChange, onEdit }: { item: Item | null; onOpenChange(o: boolean): void; onEdit(): void }) {
   const { trip, me, isOwner } = useTrip()
   const [confirm, setConfirm] = useState(false)
+  // Opening a plan saves its documents and photo on the device (the service worker keeps them), so they work offline.
+  const files = item ? [...(item.attachments ?? []).map((a) => a.url), ...(item.photoURL ? [item.photoURL] : [])] : []
+  const filesKey = files.join('|')
+  useEffect(() => {
+    if (!filesKey || !('serviceWorker' in navigator) || !navigator.serviceWorker.controller) return
+    for (const url of filesKey.split('|')) void fetch(url, { mode: 'no-cors' }).catch(() => {})
+  }, [filesKey])
   if (!item) return null
   const canDelete = item.createdBy === me || isOwner
   const when = item.type === 'stay' && item.checkOut ? `${formatLongDate(item.date)} → ${formatLongDate(item.checkOut.date)}` : formatLongDate(item.date)
@@ -44,6 +52,11 @@ export function ItemSheet({ item, onOpenChange, onEdit }: { item: Item | null; o
                   <span className="min-w-0 flex-1">
                     <span className="block">{item.location.name}</span>
                     {item.location.address && <span className="block text-muted-foreground">{item.location.address}</span>}
+                    {item.location.localName && item.location.localName !== item.location.name && (
+                      <span className="block text-muted-foreground" lang="zh-CN">
+                        {item.location.localName}
+                      </span>
+                    )}
                   </span>
                   <ExternalLink className="size-4 shrink-0 text-primary" aria-label="Open in Google Maps" />
                 </a>
@@ -63,8 +76,22 @@ export function ItemSheet({ item, onOpenChange, onEdit }: { item: Item | null; o
               </li>
             )}
           </ul>
+          {(item.attachments ?? []).length > 0 && (
+            <ul className="divide-y divide-border/70 overflow-hidden rounded-2xl bg-foreground/[0.04] text-[0.9375rem]" aria-label="Tickets and documents">
+              {(item.attachments ?? []).map((a) => (
+                <li key={a.url}>
+                  <a href={a.url} target="_blank" rel="noreferrer" className="flex min-h-12 items-center gap-3 px-4 py-2.5 active:bg-foreground/[0.06]">
+                    <FileText className="size-5 shrink-0 text-muted-foreground" aria-hidden />
+                    <span className="min-w-0 flex-1 truncate">{a.name}</span>
+                    <ExternalLink className="size-4 shrink-0 text-primary" aria-hidden />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
           {item.notes && <p className="text-[0.9375rem] whitespace-pre-wrap">{item.notes}</p>}
-          <Button onClick={onEdit}>
+          {item.location && <RouteActions to={item.location} />}
+          <Button variant={item.location ? 'secondary' : 'default'} onClick={onEdit}>
             <Pencil /> Edit
           </Button>
           {canDelete && (

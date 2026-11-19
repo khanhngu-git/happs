@@ -35,7 +35,14 @@ export const ActivityRow = forwardRef<HTMLLIElement, { item: Item; onOpen(): voi
           )}
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[1.0625rem]">{item.title}</span>
-            {item.location?.name && item.location.name !== item.title && <span className="block truncate text-[0.875rem] text-muted-foreground">{item.location.name}</span>}
+            {item.location?.name && (item.location.name !== item.title || item.location.localName) && (
+              <span className="block truncate text-[0.875rem] text-muted-foreground">
+                {item.location.name !== item.title && item.location.name}
+                {item.location.localName && item.location.localName !== item.location.name && (
+                  <span lang="zh-CN">{item.location.name !== item.title ? ` · ${item.location.localName}` : item.location.localName}</span>
+                )}
+              </span>
+            )}
           </span>
           {!trailing && <ChevronRight className="mr-3 size-4 shrink-0 text-muted-foreground/70" aria-hidden />}
         </button>

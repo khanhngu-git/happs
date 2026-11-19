@@ -22,6 +22,7 @@ import {
   itemSchema,
   memberSchema,
   notificationSchema,
+  ideaSchema,
   settlementBatchSchema,
   shareSchema,
   tripSchema,
@@ -59,6 +60,7 @@ export const converters = {
   share: converter(shareSchema),
   batch: converter(settlementBatchSchema),
   notification: converter(notificationSchema),
+  idea: converter(ideaSchema),
 }
 
 export type UserProfile = WithId<z.output<typeof userSchema>>
@@ -70,6 +72,7 @@ export type Expense = WithId<z.output<typeof expenseSchema>>
 export type Share = WithId<z.output<typeof shareSchema>>
 export type SettlementBatch = WithId<z.output<typeof settlementBatchSchema>>
 export type AppNotification = WithId<z.output<typeof notificationSchema>>
+export type Idea = WithId<z.output<typeof ideaSchema>>
 
 /* ---------- References ---------- */
 
@@ -89,6 +92,7 @@ export const refs = {
   shares: (tripId: string, expenseId: string) =>
     collection(db, 'trips', tripId, 'expenses', expenseId, 'shares').withConverter(converters.share),
   batches: (tripId: string) => collection(db, 'trips', tripId, 'settlementBatches').withConverter(converters.batch),
+  ideas: (tripId: string) => collection(db, 'trips', tripId, 'ideas').withConverter(converters.idea),
 }
 
 /* ---------- Realtime hooks ---------- */

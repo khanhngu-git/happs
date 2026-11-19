@@ -4,7 +4,7 @@ import { refs, useLiveQuery, type Expense, type Item, type Trip } from '@/lib/fi
 import { reorder } from '@/shared/itinerary'
 import { removeByUrl } from '@/lib/uploads'
 import type { ItemType } from '@/shared/itinerary'
-import type { Location } from '@/shared/schemas'
+import type { Attachment, Location } from '@/shared/schemas'
 import { baseAmount, costToExpense, moneyChanged, sharesLocked, SharesLockedError, type ItemCost } from '@/features/expenses/expenseApi'
 
 export function useItems(tripId: string) {
@@ -24,6 +24,7 @@ export interface ItemValues {
   bookingUrl: string
   bookingRef: string
   photoURL: string | null
+  attachments?: Attachment[]
 }
 
 /**
@@ -78,6 +79,7 @@ export async function deleteItem(trip: Trip, item: Item) {
   batch.delete(doc(db, 'trips', trip.id, 'items', item.id))
   await batch.commit()
   if (item.photoURL) await removeByUrl(item.photoURL)
+  await Promise.all((item.attachments ?? []).map((a) => removeByUrl(a.url)))
 }
 
 /** A fresh item id, so a photo can be uploaded before the item is first saved. */

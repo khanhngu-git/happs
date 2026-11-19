@@ -11,7 +11,8 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { defineSecret } from 'firebase-functions/params'
 import { logger } from 'firebase-functions/v2'
 import { db } from './admin'
-import { parseInput, requireAuth } from './util'
+import { callableOptions, parseInput, requireAuth } from './util'
+import { consumeQuota, dailyLimits } from './quota'
 import { actorInput, hotelPageUrl, hotelReviewsInput, hotelSearchInput, normalizeHotels, normalizeReviews, type HotelResult, type HotelReviews } from '@shared/hotelFinder'
 import { diffDays } from '@shared/dates'
 
@@ -22,7 +23,7 @@ const CACHE_MS = 30 * 60 * 1000
 
 const cache = new Map<string, { at: number; hotels: HotelResult[] }>()
 
-export const hotelFinder = onCall({ secrets: [APIFY_TOKEN], timeoutSeconds: 180, memory: '256MiB' }, async (req) => {
+export const hotelFinder = onCall({ ...callableOptions, secrets: [APIFY_TOKEN], timeoutSeconds: 180, memory: '256MiB' }, async (req) => {
   const uid = requireAuth(req.auth)
   const q = parseInput(hotelSearchInput, req.data)
   const trip = await db.doc(`trips/${q.tripId}`).get()
@@ -33,6 +34,8 @@ export const hotelFinder = onCall({ secrets: [APIFY_TOKEN], timeoutSeconds: 180,
   const key = JSON.stringify([q.destination.toLowerCase(), q.checkIn, q.checkOut, q.adults, q.rooms, currency])
   const hit = cache.get(key)
   if (hit && Date.now() - hit.at < CACHE_MS) return { hotels: hit.hotels, cached: true }
+  // Each Apify run is billed, so each person gets a daily allowance (cached answers are free).
+  await consumeQuota(uid, 'hotelSearch', dailyLimits.hotelSearch())
 
   const token = APIFY_TOKEN.value()
   if (!token) throw new HttpsError('failed-precondition', 'Hotel search isn’t set up yet: the Apify token is missing.')
@@ -79,7 +82,7 @@ const reviewsCache = new Map<string, { at: number; reviews: HotelReviews }>()
  * Actor "knagymate/trip-com-reviews-scraper" (about US$0.004 per review).
  * Loaded on demand from the hotel details; cached for 6 hours per hotel.
  */
-export const hotelReviews = onCall({ secrets: [APIFY_TOKEN], timeoutSeconds: 150, memory: '256MiB' }, async (req) => {
+export const hotelReviews = onCall({ ...callableOptions, secrets: [APIFY_TOKEN], timeoutSeconds: 150, memory: '256MiB' }, async (req) => {
   const uid = requireAuth(req.auth)
   const q = parseInput(hotelReviewsInput, req.data)
   const trip = await db.doc(`trips/${q.tripId}`).get()
@@ -87,6 +90,7 @@ export const hotelReviews = onCall({ secrets: [APIFY_TOKEN], timeoutSeconds: 150
 
   const hit = reviewsCache.get(q.hotelId)
   if (hit && Date.now() - hit.at < REVIEWS_CACHE_MS) return { ...hit.reviews, cached: true }
+  await consumeQuota(uid, 'hotelReviews', dailyLimits.hotelReviews())
 
   const token = APIFY_TOKEN.value()
   if (!token) throw new HttpsError('failed-precondition', 'Reviews aren’t set up yet: the Apify token is missing.')

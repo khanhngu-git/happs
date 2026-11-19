@@ -1,3 +1,4 @@
+import type { PayTo } from '@/shared/schemas'
 import { deleteDoc, doc, orderBy, query, serverTimestamp, updateDoc, where, writeBatch, collection } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { refs, useLiveDoc, useLiveQuery, type Member, type Trip } from '@/lib/firestore'
@@ -16,7 +17,7 @@ export interface TripInput {
 }
 
 /** Trip + the creator's owner member doc in one batch (rules check both together). */
-export async function createTrip(user: User, profile: { displayName: string; photoURL: string | null } | null, input: TripInput) {
+export async function createTrip(user: User, profile: { displayName: string; photoURL: string | null; payTo?: PayTo | null } | null, input: TripInput) {
   const tripRef = doc(collection(db, 'trips'))
   const batch = writeBatch(db)
   batch.set(tripRef, {
@@ -31,6 +32,7 @@ export async function createTrip(user: User, profile: { displayName: string; pho
     displayName: profile?.displayName || user.displayName || 'Me',
     photoURL: profile?.photoURL ?? user.photoURL ?? null,
     joinedAt: serverTimestamp(),
+    payTo: profile?.payTo ?? null,
   })
   await batch.commit()
   return tripRef.id

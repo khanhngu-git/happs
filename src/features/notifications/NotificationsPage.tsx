@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router'
 import { limit, orderBy, query, updateDoc, writeBatch, doc } from 'firebase/firestore'
-import { BellOff, CheckCheck, CircleAlert, CircleCheck, Clock, Send, UserPlus, CalendarDays } from 'lucide-react'
+import { BellOff, CheckCheck, CircleAlert, CircleCheck, Clock, Send, UserPlus, CalendarDays, Receipt, Trash2, Plane } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -9,6 +9,7 @@ import { db } from '@/lib/firebase'
 import { refs, useLiveQuery, type AppNotification } from '@/lib/firestore'
 import { cn } from '@/lib/utils'
 import type { NotificationType } from '@/shared/schemas'
+import { formatInstantDate } from '@/shared/dates'
 
 const ICON: Record<NotificationType, typeof Send> = {
   memberJoined: UserPlus,
@@ -17,6 +18,9 @@ const ICON: Record<NotificationType, typeof Send> = {
   shareConfirmed: CircleCheck,
   shareDisputed: CircleAlert,
   confirmReminder: Clock,
+  expenseAdded: Receipt,
+  tripDeleted: Trash2,
+  tripTomorrow: Plane,
 }
 
 function relative(ms: number): string {
@@ -24,7 +28,7 @@ function relative(ms: number): string {
   if (s < 60) return 'just now'
   if (s < 3600) return `${Math.floor(s / 60)}m ago`
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`
-  return new Date(ms).toLocaleDateString()
+  return formatInstantDate(new Date(ms))
 }
 
 export function NotificationsPage() {

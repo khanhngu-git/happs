@@ -4,6 +4,9 @@ import { registerSW } from 'virtual:pwa-register'
 import { toast } from 'sonner'
 import './index.css'
 import { App } from '@/app/App'
+import { installErrorReporting } from '@/lib/errorReporting'
+
+installErrorReporting()
 
 // Service worker (production builds): offline shell + FCM. New versions are
 // offered with a toast instead of reloading under the user.

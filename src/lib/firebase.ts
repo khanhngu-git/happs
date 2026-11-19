@@ -13,7 +13,6 @@ import {
   persistentMultipleTabManager,
 } from 'firebase/firestore'
 import { connectFunctionsEmulator, getFunctions } from 'firebase/functions'
-import { connectStorageEmulator, getStorage } from 'firebase/storage'
 
 const env = import.meta.env
 
@@ -55,6 +54,20 @@ export const firebaseConfig = {
 }
 
 export const app = initializeApp(firebaseConfig)
+
+/**
+ * App Check proves calls come from this app, so scripts can't call the paid
+ * functions directly. Off until VITE_APPCHECK_SITE_KEY (reCAPTCHA Enterprise)
+ * is set; enforce it server-side with ENFORCE_APP_CHECK=true afterwards.
+ */
+if (env.VITE_APPCHECK_SITE_KEY && !USE_EMULATORS && typeof window !== 'undefined') {
+  // Loaded only when configured, so it costs nothing otherwise.
+  void import('firebase/app-check')
+    .then(({ initializeAppCheck, ReCaptchaEnterpriseProvider }) =>
+      initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(env.VITE_APPCHECK_SITE_KEY as string), isTokenAutoRefreshEnabled: true }),
+    )
+    .catch((err) => console.warn('App Check init failed', err))
+}
 export const auth = getAuth(app)
 
 // Persistent cache keeps the itinerary viewable offline; edits sync on reconnect.
@@ -68,7 +81,17 @@ export const db = initializeFirestore(app, {
 })
 
 export const functions = getFunctions(app, FUNCTIONS_REGION)
-export const storage = getStorage(app)
+
+/** Storage is only needed for photo uploads, so it loads on first use. */
+let storagePromise: Promise<import('firebase/storage').FirebaseStorage> | null = null
+export function getAppStorage() {
+  storagePromise ??= import('firebase/storage').then(({ getStorage, connectStorageEmulator }) => {
+    const storage = getStorage(app)
+    if (USE_EMULATORS) connectStorageEmulator(storage, env.VITE_EMULATOR_HOST || '127.0.0.1', Number(env.VITE_EMU_STORAGE_PORT) || 9199)
+    return storage
+  })
+  return storagePromise
+}
 
 if (USE_EMULATORS) {
   const host = env.VITE_EMULATOR_HOST || '127.0.0.1'
@@ -82,5 +105,4 @@ if (USE_EMULATORS) {
   if (USE_AUTH_EMULATOR) connectAuthEmulator(auth, `http://${authHost}:${port(env.VITE_EMU_AUTH_PORT, 9099)}`, { disableWarnings: true })
   connectFirestoreEmulator(db, host, port(env.VITE_EMU_FIRESTORE_PORT, 8080))
   connectFunctionsEmulator(functions, host, port(env.VITE_EMU_FUNCTIONS_PORT, 5001))
-  connectStorageEmulator(storage, host, port(env.VITE_EMU_STORAGE_PORT, 9199))
 }

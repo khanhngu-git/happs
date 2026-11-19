@@ -4,6 +4,7 @@
 export { getInvitePreview, joinTrip } from './invites'
 export { removeMember, deleteAccount } from './members'
 export { onExpenseWrite } from './expenses'
-export { onShareUpdate, onBatchWrite, remindPendingConfirmations } from './shares'
+export { onShareUpdate, onBatchWrite, remindPendingConfirmations, dayBeforeSummary } from './shares'
 export { onTripDeleted, onItemWrite } from './trips'
 export { hotelFinder, hotelReviews } from './hotelFinder'
+export { getSharedTrip } from './share'

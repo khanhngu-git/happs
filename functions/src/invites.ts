@@ -1,12 +1,12 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { FieldValue } from 'firebase-admin/firestore'
 import { db } from './admin'
-import { findInvite, inviteProblem, parseInput, requireAuth, memberName } from './util'
+import { callableOptions, findInvite, inviteProblem, parseInput, requireAuth, memberName } from './util'
 import { notify } from './notify'
 import { invitePreviewInput, joinTripInput, type InvitePreview } from '@shared/schemas'
 
 /** What someone sees on /join/:code before they are a member (they can't read the trip yet). */
-export const getInvitePreview = onCall(async (req): Promise<InvitePreview> => {
+export const getInvitePreview = onCall(callableOptions, async (req): Promise<InvitePreview> => {
   const uid = requireAuth(req.auth)
   const { code } = parseInput(invitePreviewInput, req.data)
   const { invite, tripRef } = await findInvite(code)
@@ -32,7 +32,7 @@ export const getInvitePreview = onCall(async (req): Promise<InvitePreview> => {
  * Join a trip with an invite code. Runs in a transaction so `uses` and
  * `maxUses` stay consistent under concurrent joins.
  */
-export const joinTrip = onCall(async (req): Promise<{ tripId: string; alreadyMember: boolean }> => {
+export const joinTrip = onCall(callableOptions, async (req): Promise<{ tripId: string; alreadyMember: boolean }> => {
   const uid = requireAuth(req.auth)
   const { code } = parseInput(joinTripInput, req.data)
   const { inviteRef, tripRef } = await findInvite(code)
@@ -55,6 +55,8 @@ export const joinTrip = onCall(async (req): Promise<{ tripId: string; alreadyMem
       displayName,
       photoURL,
       joinedAt: FieldValue.serverTimestamp(),
+      // How they like to be paid back, copied from their profile.
+      payTo: (user.get('payTo') as Record<string, string> | undefined) ?? null,
     })
     tx.update(inviteRef, { uses: FieldValue.increment(1) })
     return { alreadyMember: false, others: memberIds }

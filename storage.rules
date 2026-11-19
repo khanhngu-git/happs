@@ -25,10 +25,17 @@ service firebase.storage {
       allow delete: if signedIn() && request.auth.uid == uid;
     }
 
-    // trips/{tripId}/items/{file} : activity photos; any member adds or changes them.
+    // Tickets and booking confirmations: PDFs or photos, up to 10 MB.
+    function isDocument() {
+      return request.resource.contentType.matches('application/pdf|image/(jpeg|png|webp|heic|heif)')
+        && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // trips/{tripId}/items/{file} : activity photos and documents; any member adds or changes them.
     match /trips/{tripId}/items/{file} {
       allow read: if signedIn() && request.auth.uid in trip(tripId).memberIds;
-      allow create, update: if signedIn() && request.auth.uid in trip(tripId).memberIds && isImage();
+      allow create, update: if signedIn() && request.auth.uid in trip(tripId).memberIds
+        && (file.matches('.*-doc-.*') ? isDocument() : isImage());
       allow delete: if signedIn() && request.auth.uid in trip(tripId).memberIds;
     }
 

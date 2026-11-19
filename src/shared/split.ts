@@ -10,9 +10,12 @@ export type SplitMethod = 'equal' | 'exact' | 'percent'
 export type Allocation = Record<string, number>
 
 export class SplitError extends Error {
-  constructor(message: string) {
+  /** For exact splits that don't add up: the assigned sum and the total, in minor units. */
+  mismatch?: { sum: number; total: number }
+  constructor(message: string, mismatch?: { sum: number; total: number }) {
     super(message)
     this.name = 'SplitError'
+    this.mismatch = mismatch
   }
 }
 
@@ -99,7 +102,7 @@ export function splitExact(totalMinor: number, amounts: Allocation): Allocation 
     if (v < 0) throw new SplitError('Amounts cannot be negative')
     sum += v
   }
-  if (sum !== totalMinor) throw new SplitError(`Amounts add up to ${sum} but the total is ${totalMinor}`)
+  if (sum !== totalMinor) throw new SplitError(`Amounts add up to ${sum} but the total is ${totalMinor}`, { sum, total: totalMinor })
   return { ...amounts }
 }
 

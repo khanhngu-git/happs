@@ -54,6 +54,7 @@ export function useItineraryDialogs(items: Item[]) {
         prefill={prefill}
         defaultDate={formDate}
         nextOrder={nextOrder}
+        items={items}
       />
       <ItemSheet
         item={openItem}
@@ -72,5 +73,6 @@ export function useItineraryDialogs(items: Item[]) {
     openItem: (i: Item) => setItemParam(i.id),
     addItem: (date: string) => openForm(null, date),
     addPrefilled: (p: ItemPrefill) => openForm(null, p.date, p),
+    editItem: (i: Item) => openForm(i, i.date),
   }
 }

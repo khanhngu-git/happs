@@ -1,6 +1,6 @@
 import { httpsCallable } from 'firebase/functions'
 import { functions } from './firebase'
-import type { InvitePreview } from '@/shared/schemas'
+import type { InvitePreview, SharedTrip } from '@/shared/schemas'
 import type { HotelResult, HotelReviews, HotelReviewsInput, HotelSearchInput } from '@/shared/hotelFinder'
 
 /** Typed wrappers around callable Cloud Functions. */
@@ -11,6 +11,7 @@ const call =
 
 export const api = {
   getInvitePreview: call<{ code: string }, InvitePreview>('getInvitePreview'),
+  getSharedTrip: call<{ token: string }, SharedTrip>('getSharedTrip'),
   joinTrip: call<{ code: string }, { tripId: string; alreadyMember: boolean }>('joinTrip'),
   removeMember: call<{ tripId: string; uid: string }, { removed: boolean }>('removeMember'),
   deleteAccount: call<Record<string, never>, { deleted: boolean }>('deleteAccount'),

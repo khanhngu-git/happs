@@ -258,6 +258,29 @@ describe('expenses and items', () => {
     await assertFails(setDoc(doc(db(env, OUTSIDER), `trips/${TRIP}/items/i6`), item(OUTSIDER)))
     await assertSucceeds(updateDoc(doc(db(env, MEMBER2), `trips/${TRIP}/items/i1`), { order: 500 }))
   })
+  it('ideas: members add and vote only for themselves; creator or owner deletes', async () => {
+    const idea = (createdBy: string, votes: string[]) => ({ title: 'Hot pot', type: 'food', location: null, note: '', votes, createdBy })
+    await assertSucceeds(setDoc(doc(db(env, MEMBER), `trips/${TRIP}/ideas/a`), idea(MEMBER, [MEMBER])))
+    await assertFails(setDoc(doc(db(env, MEMBER), `trips/${TRIP}/ideas/b`), idea(MEMBER, [MEMBER, MEMBER2])))
+    await assertFails(setDoc(doc(db(env, OUTSIDER), `trips/${TRIP}/ideas/c`), idea(OUTSIDER, [])))
+    await assertSucceeds(updateDoc(doc(db(env, MEMBER2), `trips/${TRIP}/ideas/a`), { votes: [MEMBER, MEMBER2] }))
+    await assertFails(updateDoc(doc(db(env, MEMBER2), `trips/${TRIP}/ideas/a`), { votes: [MEMBER2] }))
+    await assertFails(updateDoc(doc(db(env, MEMBER2), `trips/${TRIP}/ideas/a`), { title: 'Mine now' }))
+    await assertFails(deleteDoc(doc(db(env, MEMBER2), `trips/${TRIP}/ideas/a`)))
+    await assertSucceeds(deleteDoc(doc(db(env, OWNER), `trips/${TRIP}/ideas/a`)))
+  })
+  it('trip share token: owner sets a long random token or turns it off', async () => {
+    await assertSucceeds(updateDoc(doc(db(env, OWNER), `trips/${TRIP}`), { shareToken: 'Abc23'.repeat(6) }))
+    await assertFails(updateDoc(doc(db(env, OWNER), `trips/${TRIP}`), { shareToken: 'short' }))
+    await assertFails(updateDoc(doc(db(env, MEMBER), `trips/${TRIP}`), { shareToken: 'Xyz23'.repeat(6) }))
+    await assertSucceeds(updateDoc(doc(db(env, OWNER), `trips/${TRIP}`), { shareToken: null }))
+  })
+  it('items: a location may carry its local-language name and address', async () => {
+    const loc = { placeId: 'p1', name: 'The Bund', address: 'Shanghai, China', lat: 31.24, lng: 121.49 }
+    await assertSucceeds(setDoc(doc(db(env, MEMBER), `trips/${TRIP}/items/i7`), item(MEMBER, { location: { ...loc, localName: '外滩', localAddress: '中国上海市中山东一路' } })))
+    await assertFails(setDoc(doc(db(env, MEMBER), `trips/${TRIP}/items/i8`), item(MEMBER, { location: { ...loc, localName: 42 } })))
+    await assertFails(setDoc(doc(db(env, MEMBER), `trips/${TRIP}/items/i9`), item(MEMBER, { location: { ...loc, nickname: 'x' } })))
+  })
   it('items: only creator or owner deletes', async () => {
     await env.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), `trips/${TRIP}/items/i1`), item(MEMBER))

@@ -27,8 +27,10 @@ export function ShareRow({ share, showAmountIn, secondary }: { share: Share; sho
   const isPayerOwn = share.debtorUid === share.payerUid
   const method = PAYMENT_METHODS.find((m) => m.value === share.method)?.label
 
+  // Nested under a titled <li> when `secondary`, so it mustn't be a list item itself.
+  const Root = secondary ? 'div' : 'li'
   return (
-    <li className="space-y-2 px-4 py-3">
+    <Root className="space-y-2 px-4 py-3">
       <div className="flex items-center gap-3">
         <UserAvatar name={member?.displayName} photoURL={member?.photoURL} className="size-9" />
         <div className="min-w-0 flex-1">
@@ -81,8 +83,11 @@ export function ShareRow({ share, showAmountIn, secondary }: { share: Share; sho
         title={`Pay ${nameOf(share.payerUid)}`}
         description={`${formatMoney(share.amountMinor, share.currency)} for ${share.expenseTitle}`}
         onSubmit={(d) => markSent(share, me, d).then(() => void toast.success(`We’ll ask ${nameOf(share.payerUid)} to confirm`), fail)}
+        payTo={membersById.get(share.payerUid)?.payTo}
+        amountMinor={share.amountMinor}
+        currency={share.currency}
       />
       <DisputeDialog open={disputing} onOpenChange={setDisputing} onSubmit={(r) => disputeShare(share, me, r).then(() => void toast.success('Marked as not received'), fail)} />
-    </li>
+    </Root>
   )
 }

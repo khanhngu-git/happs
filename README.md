@@ -85,6 +85,20 @@ The client config for project `happss` goes in `.env.local` (see `.env.example`)
 
 Never commit service account keys. The Admin SDK key isn't needed for any of the above: deployed functions use their default service account, and local dev uses the emulators.
 
+## Production checklist
+
+These are one-time console or CLI steps; the code for each is already in place.
+
+1. **Deploy rules, indexes and functions** after pulling: `firebase deploy --only firestore,storage,functions`. The rules now cover payment details, ideas, read-only links, plan documents, `usage` counters and `clientErrors`.
+2. **App Check.** In the Firebase console, App Check → register the web app with **reCAPTCHA Enterprise** and put the site key in `VITE_APPCHECK_SITE_KEY`. Deploy the web app, check the App Check metrics show verified requests, then set `ENFORCE_APP_CHECK=true` in `functions/.env` and redeploy functions. From then on, callables reject requests that don't come from the app.
+3. **Daily limits on paid calls.** Hotel searches (20) and review lookups (30) per person per UTC day; change them with `HOTEL_SEARCH_DAILY_LIMIT` / `HOTEL_REVIEWS_DAILY_LIMIT` in `functions/.env`.
+4. **Budget alert.** Google Cloud Billing → Budgets & alerts, e.g. $10/month with email alerts at 50/90/100%. Also set daily quotas on the Maps key (Places API (New): Autocomplete, Place Details, Text Search).
+5. **Old notifications expire.** Add a TTL policy so Firestore deletes them after 90 days: `gcloud firestore fields ttls update expireAt --collection-group=notifications --enable-ttl --project=happss`.
+6. **Backups.** Turn on point-in-time recovery (`gcloud firestore databases update --database='(default)' --enable-pitr --project=happss`) and a daily backup schedule (`gcloud firestore backups schedules create --database='(default)' --recurrence=daily --retention=14d --project=happss`).
+7. **Content-Security-Policy** ships as `Content-Security-Policy-Report-Only` (`firebase.json`). After a week with no violations in the browser console on the live site, rename the header to `Content-Security-Policy` to enforce it.
+8. **Crash reports** land in the `clientErrors` collection (Firestore console). Add the same TTL policy there if you like: `--collection-group=clientErrors`.
+9. **CI** (`.github/workflows/ci.yml`) runs typecheck, lint, unit, rules and e2e tests on every push and pull request; no secrets needed.
+
 ## Hotel finder (Apify · Trip.com)
 
 The itinerary's **+** → **Find a hotel** searches live Trip.com listings for the trip's destination, dates and group size. It uses the Apify Actor [`hotels-scrapers/trip-hotel-scraper`](https://apify.com/hotels-scrapers/trip-hotel-scraper). Choosing a hotel prefills a stay with:
