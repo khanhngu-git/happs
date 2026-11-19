@@ -100,6 +100,7 @@ You review the stay before saving it. Nothing is booked in the app.
 - **Deploy:** `firebase functions:secrets:set APIFY_TOKEN`.
 - **Cost:** each search is one Actor run, about US$0.07 for 20 hotels with residential proxies. Identical searches within 30 minutes are reused. Only trip members can search.
 - A search takes roughly 20–90 seconds (a real browser scrape), so the app shows a timer.
+- **Guest reviews:** in a hotel's details, **Show guest reviews** loads the 10 most relevant Trip.com reviews (overall score, sub-scores, text with translations) via the Apify Actor [`knagymate/trip-com-reviews-scraper`](https://apify.com/knagymate/trip-com-reviews-scraper). It costs about US$0.04 per hotel, uses the same `APIFY_TOKEN`, and is cached for 6 hours per hotel.
 
 ## How the money works
 
