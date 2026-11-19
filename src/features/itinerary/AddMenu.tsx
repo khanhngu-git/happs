@@ -1,22 +1,19 @@
-import { BedDouble, Camera, PencilLine, Plane } from 'lucide-react'
+import { PencilLine, Search } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import type { BookingKind } from '@/shared/booking'
 
 const ROWS = [
-  { key: 'own', label: 'Add your own', sub: 'Anything you’ve planned or booked elsewhere', icon: PencilLine, color: 'text-primary' },
-  { key: 'flight', label: 'Book a flight', sub: 'Search live fares', icon: Plane, color: 'text-sky-600 dark:text-sky-400' },
-  { key: 'hotel', label: 'Book a hotel', sub: 'Rooms for your dates', icon: BedDouble, color: 'text-indigo-600 dark:text-indigo-400' },
-  { key: 'activity', label: 'Book an activity', sub: 'Tours, tickets and experiences', icon: Camera, color: 'text-orange-600 dark:text-orange-400' },
+  { key: 'own', label: 'Add your own', sub: 'Anything you’ve planned or booked', icon: PencilLine, color: 'text-primary' },
+  { key: 'find', label: 'Find an activity', sub: 'Tours, tickets and experiences, with prices and photos', icon: Search, color: 'text-orange-600 dark:text-orange-400' },
 ] as const
 
 /** iOS-style action sheet behind the itinerary's + button. */
-export function AddMenu({ open, onOpenChange, onPick }: { open: boolean; onOpenChange(o: boolean): void; onPick(k: 'own' | BookingKind): void }) {
+export function AddMenu({ open, onOpenChange, onPick }: { open: boolean; onOpenChange(o: boolean): void; onPick(k: 'own' | 'find'): void }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add to the plan</DialogTitle>
-          <DialogDescription className="sr-only">Add your own activity, or find and book a flight, hotel or activity</DialogDescription>
+          <DialogDescription className="sr-only">Add your own plan, or find an activity</DialogDescription>
         </DialogHeader>
         <ul className="divide-y divide-border/70 overflow-hidden rounded-2xl bg-foreground/[0.04]">
           {ROWS.map(({ key, label, sub, icon: Icon, color }) => (
