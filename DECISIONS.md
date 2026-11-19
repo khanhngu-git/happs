@@ -75,19 +75,11 @@ The `liquid-glass` skill (github.com/heyparsadev/liquid-glass-skill) targets Swi
 - `npm run test:rules` and `npm run test:e2e` start their own emulators on separate ports (`firebase.rules-test.json`, `firebase.e2e.json`). E2E runs its own dev server on :5174 with the Auth emulator forced on. Tests can't create real accounts, even when your dev setup uses real Google sign-in, and they don't disturb your dev emulators.
 - **Per-suite emulator temp dirs.** The Storage emulator stores blobs in `$TMPDIR/firebase/storage/blobs` and removes the folder on shutdown. Dev, rules-test and e2e suites shared it, so a finished test run deleted the dev suite's blob folder, and the next upload crashed it (`ENOENT` in `persistence.appendBytes`). Every npm emulator script now sets its own `TMPDIR` under `.emulator-tmp/`.
 
-## Booking via RouteStack
-- **Where:** inside the itinerary. The **+** button opens an action sheet: Add your own / Book a flight / Book a hotel / Book an activity. The booking sheet is prefilled with the trip's destination, dates and group size.
-- **Server-side only.** RouteStack auth is an HMAC of the API key signed with the secret, exchanged for a JWT partner token, so every call goes through the `booking` callable. The token is cached in the function instance and refreshed on 401. Only members of the trip can call it, because each search costs a provider token.
-- **Hosted checkout only.** We call each vertical's `get-payment-url` and open the returned portal URL. RouteStack is merchant of record and handles payment, traveller details and confirmation. The ACP (agentic Stripe) mode is rejected with a clear message.
-- **No booking webhooks yet,** so we can't see whether the traveller paid. After checkout the sheet offers "Booked it? Add to itinerary", which creates a transport, stay or activity item (with the activity/hotel photo).
-- **Money rule kept:** RouteStack returns decimal prices, which are converted to integer minor units on the server (`src/shared/booking.ts`, unit tested).
-- **Confirmed against the live API (2026-11-19):**
-  - `tripType: 'Return'` works, and the outbound and return segments come back in one list, marked by `legindicator`. The app shows them separately and adds them as two itinerary items.
-  - Flights are always quoted and charged in USD; the `currency` parameter is ignored and the rate fields are 1. Hotels and activities honour `currency`, so they're requested, and charged, in the trip's base currency.
-  - Prices show in the trip's base currency. Anything RouteStack can only quote in another currency (flights) is converted with the day's ECB rate (Frankfurter, cached an hour). It's shown as "≈ A$…" with the real checkout amount underneath ("US$… at checkout"), so nobody is surprised at payment.
-  - Activity `ageBand: 'ADULT'` works.
-  - Live activity results use `title` and `thumbnailHiResURL`, with duration, rating, review count and free cancellation. Availability leaves option titles empty, so the server also fetches `activity/details` (option names, cancellation policy).
-  - Hotel destinations are points of interest (Google place ids, no coordinates) or single hotels (with coordinates); there are no city entries. The client resolves missing coordinates with Google Places. Hotel prices are the total for the stay.
-  - All three `get-payment-url` calls return a `travel.routestack.ai` portal URL.
-- **Keys:** the keys provided are live keys (the sandbox rejects them), so local dev points at `mcp.routestack.ai` via the git-ignored `functions/.env.local`. The committed `functions/.env` stays on the sandbox.
-- **Trains:** not offered by RouteStack (rail is on their roadmap), so nothing is shown for them.
+## Activity finder via RouteStack (booking removed)
+- **No booking in the app.** RouteStack helps people *add* real activities to the itinerary with price, location and cover image. Checkout, flights and hotels were removed. People book wherever they like; the itinerary records what they're doing.
+- **Where:** the itinerary's **+** → **Find an activity**. Search by name (`filtering.searchTerm`) within a destination, which starts at the trip's destination and can be changed or cleared. With no destination, RouteStack matches activity names globally.
+- **Prefill, not auto-save.** Choosing an option and time opens the normal activity form, prefilled with title, date, start time, location, photo, notes (option, summary, cancellation policy) and the price as a cost (paid by you, split equally between members). The person reviews and saves, so no expense is created by surprise.
+- **Location** comes from the activity details' meeting point (`logistics.start[].location`: name, address, Google place id, coordinates), so finder activities appear on the map.
+- **Prices** are requested in the trip's base currency (RouteStack honours `currency` for activities). Anything still quoted in another currency is converted with the day's ECB rate and marked "≈".
+- **Server-side only:** `activityFinder` callable; partner token cached per instance; only trip members can search because each search spends a token. The keys provided are live keys (`mcp.routestack.ai`); local dev points there via the git-ignored `functions/.env.local`.
+- **Trains, flights, hotels:** not part of the finder.
