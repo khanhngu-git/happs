@@ -67,6 +67,11 @@ export function TripForm({
     },
   })
   const { errors, isSubmitting } = form.formState
+  // The profile (and its default currency) can load after the form mounts on a
+  // direct visit or refresh: follow it until the person picks a currency.
+  useEffect(() => {
+    if (!initial && !form.getFieldState('baseCurrency').isDirty) form.setValue('baseCurrency', defaultCurrency)
+  }, [defaultCurrency, initial, form])
   const color = form.watch('coverColor')
   const emoji = form.watch('coverEmoji')
   const currencies = [...new Set([form.getValues('baseCurrency'), defaultCurrency, ...COMMON_CURRENCIES])]

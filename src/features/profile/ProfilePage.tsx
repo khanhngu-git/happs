@@ -18,20 +18,22 @@ import { disablePush, enablePush, pushState, type PushState } from '@/features/n
 import { db } from '@/lib/firebase'
 import { api, callableMessage } from '@/lib/functions'
 import { COMMON_CURRENCIES } from '@/shared/money'
-import { DEFAULT_NOTIFICATION_PREFS, type NotificationType } from '@/shared/schemas'
+import { DEFAULT_NOTIFICATION_PREFS, type NotificationType, type PayTo } from '@/shared/schemas'
 import { FeedbackDialog } from './FeedbackDialog'
 import { PhotoPicker } from '@/components/PhotoPicker'
 import { removeByUrl, uploadAvatar } from '@/lib/uploads'
 import { FullScreenLoader } from '@/components/FullScreenLoader'
 
 /**
- * Three simple switches. Each one covers a group of notification types the
+ * A few simple switches. Each one covers a group of notification types the
  * server sends (see NotificationType); a group is "on" if any of its types is.
  */
 const PREF_GROUPS: { key: string; title: string; hint: string; types: NotificationType[] }[] = [
   { key: 'itinerary', title: 'Itinerary changes', hint: 'Plans added or edited', types: ['itemChanged'] },
+  { key: 'expenses', title: 'New costs', hint: 'Someone adds a cost you share', types: ['expenseAdded'] },
   { key: 'payments', title: 'Payments', hint: 'Paid, confirmed or not received', types: ['shareSent', 'shareConfirmed', 'shareDisputed', 'confirmReminder'] },
-  { key: 'members', title: 'New members', hint: 'Someone joins a trip', types: ['memberJoined'] },
+  { key: 'tomorrow', title: 'Day-before summary', hint: 'Tomorrow’s first plans, the evening before', types: ['tripTomorrow'] },
+  { key: 'members', title: 'Trip members', hint: 'Someone joins, or a trip is deleted', types: ['memberJoined', 'tripDeleted'] },
 ]
 
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
@@ -54,6 +56,8 @@ function ProfileForm() {
   const { profile } = useAuth()
   const { data: trips } = useMyTrips(user.uid)
   const [name, setName] = useState(profile?.displayName ?? '')
+  const [payTo, setPayTo] = useState<PayTo>({ payId: profile?.payTo?.payId ?? '', paypalMe: profile?.payTo?.paypalMe ?? '', bank: profile?.payTo?.bank ?? '' })
+  const payToSaved = JSON.stringify({ payId: profile?.payTo?.payId ?? '', paypalMe: profile?.payTo?.paypalMe ?? '', bank: profile?.payTo?.bank ?? '' })
   const [push, setPush] = useState<PushState>('off')
   const [password, setPassword] = useState('')
   const [feedback, setFeedback] = useState(false)
@@ -67,12 +71,12 @@ function ProfileForm() {
   }, [])
 
   /** Name and photo live on the profile and, denormalised, in each trip's member doc. */
-  async function writeIdentity(patch: { displayName?: string; photoURL?: string | null }) {
+  async function writeIdentity(patch: { displayName?: string; photoURL?: string | null; payTo?: PayTo | null }) {
     const b = writeBatch(db)
     b.update(doc(db, 'users', user.uid), patch)
     trips.forEach((t) => b.update(doc(db, 'trips', t.id, 'members', user.uid), patch))
     await b.commit()
-    await updateProfile(user, patch)
+    if (patch.displayName !== undefined || patch.photoURL !== undefined) await updateProfile(user, { displayName: patch.displayName, photoURL: patch.photoURL })
   }
 
   async function saveName() {
@@ -157,6 +161,40 @@ function ProfileForm() {
               </NativeSelect>
             </div>
           </div>
+        </Group>
+
+        <Group title="Getting paid back">
+          <form
+            className="space-y-4 p-4"
+            onSubmit={async (e) => {
+              e.preventDefault()
+              const clean = { payId: payTo.payId.trim(), paypalMe: payTo.paypalMe.trim(), bank: payTo.bank.trim() }
+              try {
+                await writeIdentity({ payTo: clean.payId || clean.paypalMe || clean.bank ? clean : null })
+                toast.success('Saved. Friends will see this when they pay you.')
+              } catch (err) {
+                console.error(err)
+                toast.error('Couldn’t save')
+              }
+            }}
+          >
+            <p className="text-sm text-muted-foreground">Shown to people who owe you, so paying you is one tap. Only trip members see it.</p>
+            <div className="space-y-2">
+              <Label htmlFor="p-payid">PayID (phone or email)</Label>
+              <Input id="p-payid" maxLength={100} value={payTo.payId} onChange={(e) => setPayTo({ ...payTo, payId: e.target.value })} placeholder="0412 345 678" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="p-paypal">PayPal.me username</Label>
+              <Input id="p-paypal" maxLength={100} value={payTo.paypalMe} onChange={(e) => setPayTo({ ...payTo, paypalMe: e.target.value })} placeholder="paypal.me/yourname" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="p-bank">Bank details</Label>
+              <Input id="p-bank" maxLength={200} value={payTo.bank} onChange={(e) => setPayTo({ ...payTo, bank: e.target.value })} placeholder="BSB 062-000, account 1234 5678" />
+            </div>
+            <Button type="submit" variant="secondary" disabled={JSON.stringify(payTo) === payToSaved}>
+              Save payment details
+            </Button>
+          </form>
         </Group>
 
         <Group title="Notifications">

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import type { Trip } from '@/lib/firestore'
+import { formatInTimeZone } from 'date-fns-tz'
 import { todayInZone, tripDays } from '@/shared/dates'
 
 /** "Today" in the trip's time zone, refreshed every minute and when the app comes back to the foreground. */
@@ -47,4 +48,27 @@ export function useTripDay(trip: Trip) {
     if (next) setDay(next)
   }
   return { days, day, index, today, setDay, step }
+}
+
+/** The current local time ("HH:mm") in the trip's time zone, refreshed every 30 seconds and on returning to the app. */
+export function useTripTime(timeZone: string): string {
+  const read = () => {
+    try {
+      return formatInTimeZone(new Date(), timeZone, 'HH:mm')
+    } catch {
+      return new Date().toISOString().slice(11, 16)
+    }
+  }
+  const [time, setTime] = useState(read)
+  useEffect(() => {
+    const tick = () => setTime(read())
+    const id = setInterval(tick, 30_000)
+    document.addEventListener('visibilitychange', tick)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', tick)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeZone])
+  return time
 }

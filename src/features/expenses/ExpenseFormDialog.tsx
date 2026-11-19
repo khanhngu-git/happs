@@ -8,7 +8,7 @@ import { NativeSelect } from '@/components/ui/select'
 import { useTrip } from '@/features/trips/TripContext'
 import type { Expense, Item } from '@/lib/firestore'
 import { isDateString, todayInZone } from '@/shared/dates'
-import { CostFields } from './CostFields'
+import { CostFields, useCostLocked } from './CostFields'
 import { draftFromCost, emptyDraft, validateDraft, type CostDraft } from './costDraft'
 import { createExpense, SharesLockedError, updateExpense } from './expenseApi'
 import { EXPENSE_CATEGORIES } from './categories'
@@ -28,6 +28,7 @@ export function ExpenseFormDialog({ open, onOpenChange, expense, items }: { open
     expense ? draftFromCost(expense) : emptyDraft({ currency: trip.baseCurrency, paidBy: me, memberIds: members.map((m) => m.id) }),
   )
   const [error, setError] = useState<string | null>(null)
+  const costLocked = useCostLocked(trip.id, expense?.id)
   const [busy, setBusy] = useState(false)
 
 
@@ -86,7 +87,7 @@ export function ExpenseFormDialog({ open, onOpenChange, expense, items }: { open
               </NativeSelect>
             </div>
           </div>
-          <CostFields draft={draft} onChange={(d) => { setDraft(d); setError(null) }} idPrefix="exp" />
+          <CostFields draft={draft} onChange={(d) => { setDraft(d); setError(null) }} idPrefix="exp" locked={costLocked} />
           {items.length > 0 && (
             <div className="space-y-2">
               <Label htmlFor="exp-item">Linked plan (optional)</Label>

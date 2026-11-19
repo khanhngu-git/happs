@@ -74,5 +74,11 @@ describe('activity photos', () => {
     await assertFails(deleteObject(ref(st(OUTSIDER), `trips/${TRIP}/items/i1-1.jpg`)))
     await assertSucceeds(deleteObject(ref(st(MEMBER), `trips/${TRIP}/items/i1-1.jpg`)))
   })
+  it('members attach PDFs as plan documents, but not as photos', async () => {
+    const pdf = new TextEncoder().encode('%PDF-1.4 test')
+    await assertSucceeds(put(MEMBER, `trips/${TRIP}/items/i1-doc-1-ticket.pdf`, 'application/pdf', pdf))
+    await assertFails(put(OUTSIDER, `trips/${TRIP}/items/i1-doc-2-ticket.pdf`, 'application/pdf', pdf))
+    await assertFails(put(MEMBER, `trips/${TRIP}/items/i1-3.pdf`, 'application/pdf', pdf))
+    await assertFails(put(MEMBER, `trips/${TRIP}/items/i1-doc-4-x.zip`, 'application/zip', pdf))
+  })
 })
-

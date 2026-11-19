@@ -14,6 +14,8 @@ import { InviteDialog } from '@/features/invites/InviteDialog'
 import { isInviteActive, revokeInvite, useInvites } from '@/features/invites/inviteApi'
 import { useTrip } from './TripContext'
 import { transferOwnership } from './tripApi'
+import { formatInstantDate } from '@/shared/dates'
+import { useTripShares } from '@/features/expenses/expenseApi'
 
 function SectionTitle({ children, id }: { children: React.ReactNode; id: string }) {
   return (
@@ -32,6 +34,11 @@ export function MembersTab() {
   const [leaving, setLeaving] = useState(false)
   const navigate = useNavigate()
   const { data: invites } = useInvites(trip.id)
+  const { data: shares } = useTripShares(trip.id)
+  /** Unconfirmed payments involving someone: they can't leave or be removed until these settle. */
+  const openPayments = (uid: string) => shares.filter((x) => x.debtorUid !== x.payerUid && x.status !== 'confirmed' && (x.debtorUid === uid || x.payerUid === uid)).length
+  const myOpen = openPayments(me)
+  const removingOpen = removing ? openPayments(removing.id) : 0
   const active = invites.filter((i) => isInviteActive(i)).filter((i) => isOwner || i.createdBy === me)
 
   useEffect(() => {
@@ -94,7 +101,7 @@ export function MembersTab() {
                   <p className="truncate font-mono">…/join/{i.id}</p>
                   <p className="text-muted-foreground">
                     {i.uses} joined{i.maxUses ? ` of ${i.maxUses}` : ''} ·{' '}
-                    {i.expiresAt ? `expires ${i.expiresAt.toDate().toLocaleDateString()}` : 'never expires'}
+                    {i.expiresAt ? `expires ${formatInstantDate(i.expiresAt.toDate())}` : 'never expires'}
                   </p>
                 </div>
                 <Button
@@ -123,10 +130,15 @@ export function MembersTab() {
         open={!!removing}
         onOpenChange={(o) => !o && setRemoving(null)}
         title={`Remove ${removing?.displayName}?`}
-        description="They’ll lose access to this trip. You can’t remove someone who still has unconfirmed payments."
-        confirmLabel="Remove"
-        destructive
+        description={
+          removingOpen > 0
+            ? `${removing?.displayName} has ${removingOpen} payment${removingOpen === 1 ? '' : 's'} that ${removingOpen === 1 ? 'isn’t' : 'aren’t'} confirmed yet. They need to settle up before they can be removed.`
+            : 'They’ll lose access to this trip.'
+        }
+        confirmLabel={removingOpen > 0 ? 'OK' : 'Remove'}
+        destructive={removingOpen === 0}
         onConfirm={async () => {
+          if (removingOpen > 0) return
           try {
             await api.removeMember({ tripId: trip.id, uid: removing!.id })
             toast.success(`${removing!.displayName} was removed`)
@@ -154,10 +166,18 @@ export function MembersTab() {
         open={leaving}
         onOpenChange={setLeaving}
         title={`Leave ${trip.name}?`}
-        description="You’ll need a new invite link to come back. You can’t leave while you have unconfirmed payments."
-        confirmLabel="Leave trip"
-        destructive
+        description={
+          myOpen > 0
+            ? `You have ${myOpen} payment${myOpen === 1 ? '' : 's'} that ${myOpen === 1 ? 'isn’t' : 'aren’t'} confirmed yet. Settle up in Expenses first, then you can leave.`
+            : 'You’ll need a new invite link to come back.'
+        }
+        confirmLabel={myOpen > 0 ? 'Go to Expenses' : 'Leave trip'}
+        destructive={myOpen === 0}
         onConfirm={async () => {
+          if (myOpen > 0) {
+            navigate(`/trips/${trip.id}/expenses`)
+            return
+          }
           try {
             await api.removeMember({ tripId: trip.id, uid: me })
             toast.success('You left the trip')

@@ -3,7 +3,7 @@
  * web push to every registered FCM token, respecting per-type preferences.
  * Invalid tokens are deleted when a send fails.
  */
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { logger } from 'firebase-functions/v2'
 import { db, messaging, APP_URL } from './admin'
 import { DEFAULT_NOTIFICATION_PREFS, type NotificationType } from '@shared/schemas'
@@ -17,6 +17,9 @@ export interface NotifyInput {
   /** In-app path the notification opens. */
   url: string
 }
+
+/** How long notifications are kept. */
+const NOTIFICATION_TTL_DAYS = 90
 
 const INVALID_TOKEN_CODES = new Set([
   'messaging/registration-token-not-registered',
@@ -42,6 +45,8 @@ export async function notify(uid: string, input: NotifyInput): Promise<void> {
     url: input.url,
     read: false,
     createdAt: FieldValue.serverTimestamp(),
+    // Firestore's TTL policy on `expireAt` deletes old notifications (see README).
+    expireAt: Timestamp.fromMillis(Date.now() + NOTIFICATION_TTL_DAYS * 86_400_000),
   })
   await push(uid, { ...input, notificationId: ref.id })
 }

@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { Copy, ExternalLink } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -7,6 +9,58 @@ import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { PAYMENT_METHODS, type PaymentMethod } from '@/shared/shareState'
 import type { PaymentDetails } from './shareApi'
+import type { PayTo } from '@/shared/schemas'
+import { hasPayTo, paypalLink } from './payLinks'
+
+function copy(text: string, what: string) {
+  navigator.clipboard.writeText(text).then(
+    () => toast.success(`${what} copied`),
+    () => toast.error('Couldn’t copy'),
+  )
+}
+
+/** The payee's details, each one tap: copy PayID or bank details, or open PayPal with the amount filled in. */
+function PayToCard({ payTo, amountMinor, currency, onMethod }: { payTo: PayTo; amountMinor?: number; currency?: string; onMethod(m: PaymentMethod): void }) {
+  const paypal = payTo.paypalMe && amountMinor !== undefined && currency ? paypalLink(payTo.paypalMe, amountMinor, currency) : null
+  const row = 'flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left active:bg-foreground/[0.06]'
+  return (
+    <ul className="divide-y divide-border/70 overflow-hidden rounded-2xl bg-card ring-1 ring-border/70" aria-label="Their payment details">
+      {payTo.payId && (
+        <li>
+          <button type="button" className={row} onClick={() => (copy(payTo.payId, 'PayID'), onMethod('payid'))}>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm text-muted-foreground">PayID</span>
+              <span className="block truncate font-medium select-all">{payTo.payId}</span>
+            </span>
+            <Copy className="size-4 shrink-0 text-primary" aria-label="Copy PayID" />
+          </button>
+        </li>
+      )}
+      {payTo.bank && (
+        <li>
+          <button type="button" className={row} onClick={() => (copy(payTo.bank, 'Bank details'), onMethod('bank'))}>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm text-muted-foreground">Bank transfer</span>
+              <span className="block font-medium break-words select-all">{payTo.bank}</span>
+            </span>
+            <Copy className="size-4 shrink-0 text-primary" aria-label="Copy bank details" />
+          </button>
+        </li>
+      )}
+      {paypal && (
+        <li>
+          <a href={paypal} target="_blank" rel="noreferrer" className={row} onClick={() => onMethod('paypal')}>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm text-muted-foreground">PayPal</span>
+              <span className="block truncate font-medium">Pay on PayPal, amount filled in</span>
+            </span>
+            <ExternalLink className="size-4 shrink-0 text-primary" aria-hidden />
+          </a>
+        </li>
+      )}
+    </ul>
+  )
+}
 
 /** Debtor: "I've paid" (one share or a settle-all batch). */
 export function MarkPaidDialog({
@@ -15,12 +69,19 @@ export function MarkPaidDialog({
   title,
   description,
   onSubmit,
+  payTo,
+  amountMinor,
+  currency,
 }: {
   open: boolean
   onOpenChange(o: boolean): void
   title: string
   description: string
   onSubmit(d: PaymentDetails): Promise<void>
+  /** The payee's payment details, if they've added any. */
+  payTo?: PayTo | null
+  amountMinor?: number
+  currency?: string
 }) {
   const [method, setMethod] = useState<PaymentMethod>('bank')
   const [reference, setReference] = useState('')
@@ -48,6 +109,7 @@ export function MarkPaidDialog({
             }
           }}
         >
+          {hasPayTo(payTo) && <PayToCard payTo={payTo} amountMinor={amountMinor} currency={currency} onMethod={setMethod} />}
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">How did you pay?</legend>
             <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Payment method">

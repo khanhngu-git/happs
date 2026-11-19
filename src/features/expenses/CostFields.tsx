@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Lock, RefreshCw } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/select'
@@ -11,12 +11,41 @@ import { COMMON_CURRENCIES, formatMoney } from '@/shared/money'
 import { fetchFxRate } from '@/shared/fx'
 import type { SplitMethod } from '@/shared/split'
 import { remaining, validateDraft, type CostDraft } from './costDraft'
+import { sharesLocked } from './expenseApi'
 
 /**
  * Amount, currency (+ FX rate), who paid and how it is split. Controlled:
  * the parent owns the draft and validates it on submit.
  */
-export function CostFields({ draft, onChange, idPrefix, paidByLabel = 'Paid by' }: { draft: CostDraft; onChange(d: CostDraft): void; idPrefix: string; paidByLabel?: string }) {
+/** Whether money has already moved on this expense (amount, payer and split can't change then). */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useCostLocked(tripId: string, expenseId: string | null | undefined): boolean {
+  const [locked, setLocked] = useState(false)
+  useEffect(() => {
+    if (!expenseId) return
+    let live = true
+    sharesLocked(tripId, expenseId).then((l) => live && setLocked(l), () => {})
+    return () => {
+      live = false
+    }
+  }, [tripId, expenseId])
+  return locked
+}
+
+export function CostFields({
+  draft,
+  onChange,
+  idPrefix,
+  paidByLabel = 'Paid by',
+  locked = false,
+}: {
+  draft: CostDraft
+  onChange(d: CostDraft): void
+  idPrefix: string
+  paidByLabel?: string
+  /** Someone has paid towards this cost: show it, but don't let it change. */
+  locked?: boolean
+}) {
   const { trip, members, nameOf } = useTrip()
   const set = (patch: Partial<CostDraft>) => onChange({ ...draft, ...patch })
   const foreign = draft.currency !== trip.baseCurrency
@@ -42,7 +71,13 @@ export function CostFields({ draft, onChange, idPrefix, paidByLabel = 'Paid by' 
   }
 
   return (
-    <div className="space-y-4">
+    <fieldset disabled={locked} className="space-y-4 disabled:opacity-80">
+      {locked && (
+        <p className="flex gap-2 rounded-xl bg-foreground/[0.05] p-3 text-sm">
+          <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
+          Someone has already paid towards this, so the amount, payer and split are locked. You can still change the name, date and category.
+        </p>
+      )}
       <div className="grid grid-cols-[1fr_7rem] gap-3">
         <div className="space-y-2">
           <Label htmlFor={`${idPrefix}-amount`}>Amount</Label>
@@ -124,6 +159,6 @@ export function CostFields({ draft, onChange, idPrefix, paidByLabel = 'Paid by' 
         </ul>
         {left && <p className={cn('text-sm', left.done ? 'text-success' : 'text-muted-foreground')}>{left.label}</p>}
       </fieldset>
-    </div>
+    </fieldset>
   )
 }

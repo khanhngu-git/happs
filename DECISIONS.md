@@ -84,3 +84,28 @@ The `liquid-glass` skill (github.com/heyparsadev/liquid-glass-skill) targets Swi
 - **Totals:** the listing's total when shown, otherwise nightly × nights, marked "est." (taxes may be extra).
 - **Long call:** the callable has a 180 s timeout on both ends (the Apify sync run is capped at 150 s), and the sheet shows a running timer.
 - **Guest reviews** come from a second Apify Actor, `knagymate/trip-com-reviews-scraper`. It takes a Trip.com hotel URL, built from the finder's hotel id as `trip.com/hotels/detail/?hotelId=<id>`. Reviews load only when someone taps **Show guest reviews**, because each load costs about US$0.004 per review. The callable fetches the 10 most relevant and caches them for 6 hours per hotel. Translations are preferred and labelled. Hotels without a numeric Trip.com id don't offer reviews.
+
+## Getting around (travel helpers)
+- **Place search** is biased to the trip: the median of its pinned plans, or, before anything is pinned, the destination (one Places text search per destination per session). Text left in the field without picking a suggestion is kept "as typed" (no pin) instead of being dropped, and search failures say so instead of failing silently.
+- **Chinese names.** For mainland China trips (by time zone or address), picking a place also fetches its `zh-CN` name and address (`location.localName` / `localAddress`), shown under the place and used for taxis.
+- **Route links**, between consecutive timed plans ("Getting there", starting from last night's stay), on each plan and map stop, and in the Now/Next card: Google Maps directions (public transport). In mainland China also **Amap** (`uri.amap.com/navigation`, `coordinate=gaode`, `callnative=1` opens the app). Inside mainland China, Google returns GCJ-02 coordinates, the same datum as Amap, so none are converted; check this on a phone in China.
+- **DiDi** has no public link that pre-fills a destination, so "Taxi / DiDi" shows the destination in Chinese to show a driver, copies it, and opens DiDi with `diditaxi://` (unverified scheme; nothing happens if the app isn't installed). WeChat mini-program links need the mini program owner's registration, so they're not used.
+- **Now / Next** shows on today's view during the trip. A plan with no end time counts as "now" for an hour.
+- **Plans must fall within the trip's dates** (the form checks it). Plans already outside them, e.g. after shortening the trip, are listed under "Outside the trip dates" in All activities instead of disappearing.
+- **Overlaps** are a warning, not an error.
+- **Calendar export** (All activities → Add to calendar) writes an .ics file. Timed plans are in UTC, converted from the trip's zone; Anytime plans are all-day; stays run through check-out day.
+
+## Hardening and new features (2026-11-19)
+- **Paid calls are rationed per person.** `hotelFinder` and `hotelReviews` count against a daily allowance in `usage/{uid}_{day}` (server-only), charged after the cache check, so cached answers are free.
+- **App Check is wired but off** until a reCAPTCHA Enterprise site key is set (client) and `ENFORCE_APP_CHECK=true` (functions), so nothing breaks before it's registered.
+- **Crash reports** go to `clientErrors` (create-only, size-capped, at most 10 per session, deduplicated, network noise ignored) instead of a third-party service.
+- **Notifications added:** a new cost you share (`expenseAdded`), a trip deleted (`tripDeleted`, so it doesn't just vanish), and the evening-before summary (`tripTomorrow`, 6 pm in the trip's zone). Payment reminders now go at 9 am in each trip's zone rather than 9 am Sydney. Both schedules run hourly and pick the trips whose local hour matches. Notifications carry `expireAt` (90 days) for a TTL policy.
+- **Trip deletion** is attributed to the owner (only the owner may delete), not `event.authId`, which is a placeholder in the emulator.
+- **Leaving or removing someone** checks unconfirmed payments inside the same transaction, and the app explains the block before calling the function.
+- **Locked costs** are shown locked as soon as the form opens (fields disabled with a note), not only when saving fails. Zero amounts are rejected in the form and in the rules.
+- **Payment details** (`payTo`: PayID, PayPal.me name, bank details) live on the profile and are copied to each trip's member doc like name and photo, because only trip members may see them. The pay sheet offers copy-PayID, copy-bank and a PayPal.me link with the amount filled in.
+- **Ideas** (`trips/{id}/ideas`): not-yet-scheduled plans with votes. Rules let each member add or remove only their own vote. "Plan it" opens the normal form prefilled; the idea stays until someone removes it.
+- **Read-only links** (`/share/:token`, `getSharedTrip`): no sign-in; returns only the plan (no costs, notes, booking references or member names). The owner turns it on or off in Trip settings; the token is 32 random characters.
+- **Plan documents** (`items.attachments`, up to 10): PDFs or photos up to 10 MB under `trips/{id}/items/{itemId}-doc-…`. Opening a plan saves its files and photo to the service worker's `trip-files` cache, so tickets open offline. A file uploaded in a form that's then cancelled stays in Storage (small, and removed when the trip is deleted).
+- **Lazy loading:** Firebase Storage and App Check load on first use. Firestore and Auth are still in the main bundle because the app needs them to start.
+- **Not done:** forwarding booking emails (needs an inbound-mail service) and "simplify debts" (it conflicts with confirming each share 1:1; see "Who owes who is not netted").

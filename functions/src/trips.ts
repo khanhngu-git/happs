@@ -4,10 +4,33 @@ import { notify } from './notify'
 import { memberName } from './util'
 import { formatShortDate } from '@shared/dates'
 
-/** Deleting a trip removes all of its subcollections. */
+/** Deleting a trip removes all of its subcollections, and tells the other members (otherwise it just vanishes for them). */
 export const onTripDeleted = onDocumentDeleted('trips/{tripId}', async (event) => {
-  await db.recursiveDelete(db.doc(`trips/${event.params.tripId}`))
-  await deleteFolder(`trips/${event.params.tripId}/`)
+  const { tripId } = event.params
+  const data = event.data?.data()
+  // Names must be read before the members subcollection is deleted.
+  // Only the owner may delete a trip (firestore.rules), so the owner is who did it.
+  // (event.authId isn't a uid in the emulator, so it isn't relied on here.)
+  const actor = (data?.ownerId as string | undefined) ?? null
+  // The profile outlives the trip, so read the name there first.
+  const profileName = actor ? ((await db.doc(`users/${actor}`).get()).get('displayName') as string | undefined) : undefined
+  const actorName = profileName || (actor ? await memberName(tripId, actor) : '') || 'The trip owner'
+  await db.recursiveDelete(db.doc(`trips/${tripId}`))
+  await deleteFolder(`trips/${tripId}/`)
+  if (!data) return
+  const others = ((data.memberIds as string[] | undefined) ?? []).filter((m) => m !== actor)
+  await Promise.all(
+    others.map((uid) =>
+      notify(uid, {
+        type: 'tripDeleted',
+        tripId: null,
+        refPath: null,
+        title: `${actorName} deleted ${data.name as string}`,
+        body: 'The itinerary, costs and payment history for this trip are gone.',
+        url: '/',
+      }),
+    ),
+  )
 })
 
 /** Fields whose change is worth telling others about (not reordering etc). */

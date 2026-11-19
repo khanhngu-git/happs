@@ -31,6 +31,9 @@ export const notificationTypeSchema = z.enum([
   'shareConfirmed',
   'shareDisputed',
   'confirmReminder',
+  'expenseAdded',
+  'tripDeleted',
+  'tripTomorrow',
 ])
 export type NotificationType = z.infer<typeof notificationTypeSchema>
 
@@ -41,7 +44,18 @@ export const DEFAULT_NOTIFICATION_PREFS: Record<NotificationType, boolean> = {
   shareConfirmed: true,
   shareDisputed: true,
   confirmReminder: true,
+  expenseAdded: true,
+  tripDeleted: true,
+  tripTomorrow: true,
 }
+
+/** How someone likes to be paid back. Shown to the people who owe them. */
+export const payToSchema = z.object({
+  payId: z.string().max(100).default(''),
+  paypalMe: z.string().max(100).default(''),
+  bank: z.string().max(200).default(''),
+})
+export type PayTo = z.infer<typeof payToSchema>
 
 export const userSchema = z.object({
   displayName: z.string().default(''),
@@ -50,6 +64,7 @@ export const userSchema = z.object({
   defaultCurrency: currencyCode.default('AUD'),
   createdAt: timestamp.optional(),
   notificationPrefs: z.record(z.string(), z.boolean()).default({}),
+  payTo: payToSchema.nullable().default(null),
 })
 export type UserDoc = z.infer<typeof userSchema>
 
@@ -65,6 +80,8 @@ export const tripSchema = z.object({
   coverEmoji: z.string().nullable().default(null),
   coverColor: z.string().nullable().default(null),
   coverPhotoURL: z.string().nullable().default(null),
+  /** Read-only link for people who aren't on the trip (owner turns it on/off). */
+  shareToken: z.string().nullable().default(null),
   createdAt: timestamp.optional(),
   updatedAt: timestamp.optional(),
 })
@@ -75,6 +92,7 @@ export const memberSchema = z.object({
   displayName: z.string().default(''),
   photoURL: z.string().nullable().default(null),
   joinedAt: timestamp.optional(),
+  payTo: payToSchema.nullable().default(null),
 })
 export type MemberDoc = z.infer<typeof memberSchema>
 
@@ -96,10 +114,23 @@ export const locationSchema = z.object({
   address: z.string().default(''),
   lat: z.number().nullable().default(null),
   lng: z.number().nullable().default(null),
+  /** Name and address in the local language (e.g. Chinese), to show a taxi driver or paste into a local ride app. */
+  localName: z.string().optional(),
+  localAddress: z.string().optional(),
 })
 export type Location = z.infer<typeof locationSchema>
 
 const dateTime = z.object({ date: dateStr, time: timeStr.nullable() })
+
+/** A ticket, booking confirmation or other document attached to a plan. */
+export const attachmentSchema = z.object({
+  name: z.string(),
+  url: z.string(),
+  contentType: z.string(),
+  size: z.number().int().nonnegative().default(0),
+})
+export type Attachment = z.infer<typeof attachmentSchema>
+export const MAX_ATTACHMENTS = 10
 
 export const itemSchema = z.object({
   type: itemTypeSchema,
@@ -116,6 +147,7 @@ export const itemSchema = z.object({
   order: z.number().default(0),
   linkedExpenseId: z.string().nullable().default(null),
   photoURL: z.string().nullable().default(null),
+  attachments: z.array(attachmentSchema).default([]),
   createdBy: z.string(),
   createdAt: timestamp.optional(),
   updatedAt: timestamp.optional(),
@@ -218,3 +250,29 @@ export interface InvitePreview {
   invitedBy: string
   alreadyMember: boolean
 }
+
+export const sharedTripInput = z.object({ token: z.string().regex(/^[A-Za-z0-9]{24,64}$/, 'This link isn’t valid.') })
+
+/** What a read-only link shows: the plan, without costs, notes or booking details. */
+export interface SharedTrip {
+  name: string
+  destination: string
+  startDate: string
+  endDate: string
+  timeZone: string
+  coverEmoji: string | null
+  coverPhotoURL: string | null
+  items: Array<Pick<ItemDoc, 'type' | 'title' | 'date' | 'startTime' | 'endTime' | 'checkIn' | 'checkOut' | 'location' | 'photoURL' | 'order'> & { id: string }>
+}
+
+/** Something someone wants to do, not yet on a day. Members vote; anyone can put it in the plan. */
+export const ideaSchema = z.object({
+  title: z.string(),
+  type: itemTypeSchema.default('activity'),
+  location: locationSchema.nullable().default(null),
+  note: z.string().default(''),
+  votes: z.array(z.string()).default([]),
+  createdBy: z.string(),
+  createdAt: timestamp.optional(),
+})
+export type IdeaDoc = z.infer<typeof ideaSchema>

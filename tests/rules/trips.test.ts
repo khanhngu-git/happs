@@ -40,6 +40,22 @@ describe('users', () => {
     await assertFails(setDoc(doc(db(env, MEMBER), 'users', MEMBER), { displayName: 'B', isAdmin: true }))
     await assertFails(setDoc(doc(db(env, MEMBER), 'users', MEMBER), { displayName: 'B', defaultCurrency: 'dollars' }))
   })
+  it('payment details: short known fields only, on the profile and my own member doc', async () => {
+    const payTo = { payId: '0412 345 678', paypalMe: 'bob', bank: 'BSB 062-000 1234 5678' }
+    await assertSucceeds(setDoc(doc(db(env, MEMBER), 'users', MEMBER), { displayName: 'Bob', payTo }))
+    await assertFails(setDoc(doc(db(env, MEMBER), 'users', MEMBER), { displayName: 'Bob', payTo: { ...payTo, iban: 'x' } }))
+    await assertFails(setDoc(doc(db(env, MEMBER), 'users', MEMBER), { displayName: 'Bob', payTo: { bank: 'x'.repeat(201) } }))
+    await assertSucceeds(updateDoc(doc(db(env, MEMBER), 'trips', TRIP, 'members', MEMBER), { payTo }))
+    await assertFails(updateDoc(doc(db(env, MEMBER), 'trips', TRIP, 'members', MEMBER2), { payTo }))
+  })
+  it('usage counters and error reports are not readable by clients', async () => {
+    await assertFails(getDoc(doc(db(env, MEMBER), 'usage', `${MEMBER}_2026-12-05`)))
+    await assertFails(setDoc(doc(db(env, MEMBER), 'usage', `${MEMBER}_2026-12-05`), { booking: 0 }))
+    const report = { uid: MEMBER, message: 'Boom', stack: '', url: '/', appVersion: '0.1.0', userAgent: 'test' }
+    await assertSucceeds(setDoc(doc(db(env, MEMBER), 'clientErrors', 'e1'), report))
+    await assertFails(setDoc(doc(db(env, MEMBER), 'clientErrors', 'e2'), { ...report, uid: OWNER }))
+    await assertFails(getDoc(doc(db(env, MEMBER), 'clientErrors', 'e1')))
+  })
   it('notifications: owner reads and flips read only; nobody creates', async () => {
     await env.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'users', MEMBER, 'notifications', 'n1'), { type: 'shareSent', title: 'x', body: '', read: false })

@@ -12,6 +12,9 @@ import { db } from './admin'
 import { notify } from './notify'
 import { memberName } from './util'
 import { formatMoney } from '@shared/money'
+import { addDays, diffDays, formatTime } from '@shared/dates'
+import { dayLines, localDateHour } from '@shared/itinerary'
+import type { ItemDoc } from '@shared/schemas'
 
 async function tripInfo(tripId: string) {
   const t = await db.doc(`trips/${tripId}`).get()
@@ -106,18 +109,41 @@ export const onBatchWrite = onDocumentWritten('trips/{tripId}/settlementBatches/
   }
 })
 
-/** Daily nudge for payers with payments marked sent more than 48 hours ago. */
-export const remindPendingConfirmations = onSchedule({ schedule: 'every day 09:00', timeZone: 'Australia/Sydney' }, async () => {
+/** Trip time zones, read once per run. */
+function tripZones() {
+  const cache = new Map<string, Promise<string | null>>()
+  return (tripId: string) => {
+    let z = cache.get(tripId)
+    if (!z) {
+      z = db.doc(`trips/${tripId}`).get().then((t) => (t.exists ? ((t.get('timeZone') as string) || 'UTC') : null))
+      cache.set(tripId, z)
+    }
+    return z
+  }
+}
+
+/** The local hour when reminders go out. */
+const REMINDER_HOUR = 9
+
+/**
+ * Nudge payers about payments marked sent more than 48 hours ago. Runs hourly
+ * and sends at 9 am in each trip's own time zone (not 9 am Sydney for everyone).
+ */
+export const remindPendingConfirmations = onSchedule({ schedule: 'every 60 minutes', timeZone: 'UTC' }, async () => {
   const cutoff = Timestamp.fromMillis(Date.now() - 48 * 60 * 60 * 1000)
   const snap = await db.collectionGroup('shares').where('status', '==', 'sent').where('updatedAt', '<', cutoff).get()
-  const byPayer = new Map<string, { tripId: string; refPath: string; count: number }>()
+  const zoneOf = tripZones()
+  const groups = new Map<string, { payer: string; tripId: string; refPath: string; count: number }>()
   for (const d of snap.docs) {
     const s = d.data()
-    const cur = byPayer.get(s.payerUid)
+    const zone = await zoneOf(s.tripId)
+    if (!zone || localDateHour(zone).hour !== REMINDER_HOUR) continue
+    const key = `${s.payerUid}|${s.tripId}`
+    const cur = groups.get(key)
     if (cur) cur.count++
-    else byPayer.set(s.payerUid, { tripId: s.tripId, refPath: d.ref.path, count: 1 })
+    else groups.set(key, { payer: s.payerUid, tripId: s.tripId, refPath: d.ref.path, count: 1 })
   }
-  for (const [payer, { tripId, refPath, count }] of byPayer) {
+  for (const { payer, tripId, refPath, count } of groups.values()) {
     await notify(payer, {
       type: 'confirmReminder',
       tripId,
@@ -127,5 +153,46 @@ export const remindPendingConfirmations = onSchedule({ schedule: 'every day 09:0
       url: expensesUrl(tripId, count === 1 ? refPath : undefined),
     })
   }
-  logger.info(`Sent confirmation reminders to ${byPayer.size} payers`)
+  logger.info(`Sent ${groups.size} confirmation reminders`)
+})
+
+/** The local hour for the evening-before summary. */
+const SUMMARY_HOUR = 18
+
+/**
+ * Evening before each trip day (6 pm local): what's on tomorrow, so nobody
+ * misses an early flight or check-out. Only days with plans, only during or
+ * just before the trip.
+ */
+export const dayBeforeSummary = onSchedule({ schedule: 'every 60 minutes', timeZone: 'UTC' }, async () => {
+  const now = new Date()
+  // Trips that haven't ended (a day of slack for time zones); start is filtered per trip below.
+  const yesterday = new Date(now.getTime() - 86_400_000).toISOString().slice(0, 10)
+  const trips = await db.collection('trips').where('endDate', '>=', yesterday).get()
+  let sent = 0
+  for (const t of trips.docs) {
+    const trip = t.data()
+    const local = localDateHour(trip.timeZone || 'UTC', now)
+    if (local.hour !== SUMMARY_HOUR) continue
+    const tomorrow = addDays(local.date, 1)
+    if (tomorrow < trip.startDate || tomorrow > trip.endDate) continue
+    const items = (await t.ref.collection('items').get()).docs.map((d) => ({ id: d.id, ...(d.data() as ItemDoc) }))
+    const lines = dayLines(items, tomorrow, formatTime)
+    if (lines.length === 0) continue
+    const dayNo = diffDays(tomorrow, trip.startDate) + 1
+    await Promise.all(
+      (trip.memberIds as string[]).map((uid) =>
+        notify(uid, {
+          type: 'tripTomorrow',
+          tripId: t.id,
+          refPath: null,
+          title: dayNo === 1 ? `${trip.name} starts tomorrow` : `Tomorrow in ${trip.name} (day ${dayNo})`,
+          body: lines.join(' · '),
+          url: `/trips/${t.id}/itinerary?day=${tomorrow}`,
+        }),
+      ),
+    )
+    sent++
+  }
+  logger.info(`Sent day-before summaries for ${sent} trips`)
 })

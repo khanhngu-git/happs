@@ -8,6 +8,9 @@
  */
 import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching'
 import { NavigationRoute, registerRoute } from 'workbox-routing'
+import { CacheFirst } from 'workbox-strategies'
+import { CacheableResponsePlugin } from 'workbox-cacheable-response'
+import { ExpirationPlugin } from 'workbox-expiration'
 import { initializeApp } from 'firebase/app'
 import { getMessaging, onBackgroundMessage } from 'firebase/messaging/sw'
 
@@ -17,6 +20,17 @@ cleanupOutdatedCaches()
 precacheAndRoute(self.__WB_MANIFEST)
 // SPA: serve the cached index.html for every navigation, except Firebase's reserved paths.
 registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html'), { denylist: [/^\/__\//] }))
+
+// Photos and tickets from Firebase Storage: kept on the device once seen, so
+// boarding passes and confirmations open with no signal. Download URLs carry
+// a token and a unique filename, so a cached copy never goes stale.
+registerRoute(
+  ({ url, request }) => request.method === 'GET' && url.hostname === 'firebasestorage.googleapis.com',
+  new CacheFirst({
+    cacheName: 'trip-files',
+    plugins: [new CacheableResponsePlugin({ statuses: [0, 200] }), new ExpirationPlugin({ maxEntries: 300, maxAgeSeconds: 90 * 24 * 60 * 60, purgeOnQuotaError: true })],
+  }),
+)
 
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') void self.skipWaiting()

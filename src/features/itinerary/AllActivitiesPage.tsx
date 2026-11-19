@@ -1,7 +1,11 @@
+import { CalendarArrowDown } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useTrip } from '@/features/trips/TripContext'
 import { formatLongDate, tripDays } from '@/shared/dates'
-import { itemsForDay, staysForDay } from '@/shared/itinerary'
+import { itemsForDay, itemsOutsideTrip, staysForDay } from '@/shared/itinerary'
+import { buildIcs, downloadIcs } from './calendar'
 import { ActivityRow } from './ActivityRow'
 import { useItineraryDialogs } from './ItineraryDialogs'
 import { useItems } from './itineraryApi'
@@ -12,10 +16,28 @@ export function AllActivitiesPage() {
   const { data: items, loading } = useItems(trip.id)
   const { dialogs, openItem } = useItineraryDialogs(items)
   const days = tripDays(trip.startDate, trip.endDate)
+  const outside = itemsOutsideTrip(items, trip.startDate, trip.endDate)
+
+  const exportCalendar = () => {
+    try {
+      downloadIcs(trip.name, buildIcs(trip, items))
+      toast.success('Calendar file saved. Open it to add the plans to your calendar.')
+    } catch (err) {
+      console.error(err)
+      toast.error('Couldn’t make the calendar file')
+    }
+  }
 
   return (
     <main className="mx-auto max-w-2xl pb-6">
-      <h1 className="large-title px-4 pb-3">All activities</h1>
+      <div className="flex items-end justify-between gap-2 px-4 pb-3">
+        <h1 className="large-title">All activities</h1>
+        {items.length > 0 && (
+          <Button variant="ghost" size="sm" className="text-primary" onClick={exportCalendar}>
+            <CalendarArrowDown /> Add to calendar
+          </Button>
+        )}
+      </div>
       {loading ? (
         <div className="space-y-3 px-4" aria-busy>
           <Skeleton className="h-40 rounded-2xl" />
@@ -42,6 +64,19 @@ export function AllActivitiesPage() {
               </section>
             )
           })}
+          {outside.length > 0 && (
+            <section aria-labelledby="all-outside">
+              <h2 id="all-outside" className="px-4 pb-1.5 text-[0.8125rem] font-medium text-muted-foreground uppercase">
+                Outside the trip dates
+              </h2>
+              <p className="px-4 pb-2 text-sm text-muted-foreground">These don’t show in the day view. Open one and change its date to move it into the trip.</p>
+              <ul className="divide-y divide-border/70 overflow-hidden rounded-2xl ring-1 ring-border/70">
+                {outside.map((it) => (
+                  <ActivityRow key={it.id} item={it} onOpen={() => openItem(it)} />
+                ))}
+              </ul>
+            </section>
+          )}
         </div>
       )}
       {dialogs}

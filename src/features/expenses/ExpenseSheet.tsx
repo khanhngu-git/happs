@@ -7,7 +7,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useTrip } from '@/features/trips/TripContext'
 import type { Expense, Share } from '@/lib/firestore'
 import { formatMoney } from '@/shared/money'
-import { formatLongDate } from '@/shared/dates'
+import { formatLongDate, formatInstant } from '@/shared/dates'
 import { SHARE_STATUS_LABEL } from '@/shared/shareState'
 import { categoryLabel } from './categories'
 import { deleteExpense } from './expenseApi'
@@ -69,7 +69,7 @@ export function ExpenseSheet({ expense, shares, onOpenChange, onEdit }: { expens
                       <span className="font-medium">{nameOf(h.byUid)}</span> → {SHARE_STATUS_LABEL[h.status].toLowerCase()}
                       {h.byUid !== h.debtor && ` (${nameOf(h.debtor)}’s share)`}
                       <span className="block text-muted-foreground">
-                        {h.at.toDate().toLocaleString()}
+                        {formatInstant(h.at.toDate())}
                         {h.note && ` · “${h.note}”`}
                       </span>
                     </li>

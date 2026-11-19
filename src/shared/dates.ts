@@ -89,3 +89,11 @@ export function allTimeZones(): string[] {
     return ['UTC']
   }
 }
+
+const MOMENT_DATE = new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+const MOMENT = new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+
+/** A real instant in the viewer's own time zone, in the app's date style ("26 Nov 2026"). */
+export const formatInstantDate = (d: Date) => MOMENT_DATE.format(d)
+/** "26 Nov 2026, 3:05 pm" */
+export const formatInstant = (d: Date) => MOMENT.format(d)

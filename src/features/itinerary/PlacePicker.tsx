@@ -1,15 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMapsLibrary } from '@vis.gl/react-google-maps'
-import { MapPin, X } from 'lucide-react'
+import { Loader2, MapPin, PenLine, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { hasMaps } from '@/lib/maps'
 import type { Location } from '@/shared/schemas'
 
+export interface LatLng {
+  lat: number
+  lng: number
+}
+
 interface Props {
   id: string
   value: Location | null
   onChange(loc: Location | null): void
+  /** Centre to prefer suggestions around (the trip's destination). */
+  bias?: LatLng | null
+  /** Also fetch the place's name and address in this language (e.g. zh-CN for taxi drivers in China). */
+  localLanguage?: string | null
 }
 
 /** Places Autocomplete (New) when a Maps key is configured; plain text fields otherwise. */
@@ -46,21 +55,34 @@ interface Suggestion {
   prediction: google.maps.places.PlacePrediction
 }
 
-function PlacesAutocomplete({ id, value, onChange }: Props) {
+/** Suggestions within this distance of the trip's destination rank first (the API's maximum). */
+const BIAS_RADIUS_M = 50_000
+
+const typedPlace = (text: string): Location => ({ placeId: null, name: text.trim(), address: '', lat: null, lng: null })
+
+function PlacesAutocomplete({ id, value, onChange, bias, localLanguage }: Props) {
   const places = useMapsLibrary('places')
   const [text, setText] = useState('')
   const [open, setOpen] = useState(false)
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [active, setActive] = useState(-1)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const token = useRef<google.maps.places.AutocompleteSessionToken | null>(null)
 
+  const query = text.trim()
   useEffect(() => {
-    if (!places || text.trim().length < 2) return
+    if (!places || query.length < 2) return
     token.current ??= new places.AutocompleteSessionToken()
     let cancelled = false
     const t = setTimeout(async () => {
+      setBusy(true)
       try {
-        const { suggestions: s } = await places.AutocompleteSuggestion.fetchAutocompleteSuggestions({ input: text, sessionToken: token.current! })
+        const { suggestions: s } = await places.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+          input: query,
+          sessionToken: token.current!,
+          ...(bias ? { locationBias: { center: bias, radius: BIAS_RADIUS_M }, origin: bias } : {}),
+        })
         if (cancelled) return
         setSuggestions(
           s.flatMap((x) =>
@@ -70,27 +92,61 @@ function PlacesAutocomplete({ id, value, onChange }: Props) {
           ),
         )
         setActive(-1)
+        setError(null)
       } catch (err) {
         console.warn('Places autocomplete failed', err)
+        if (!cancelled) {
+          setSuggestions([])
+          setError('Place search isn’t working right now. You can still use the name as typed.')
+        }
+      } finally {
+        if (!cancelled) setBusy(false)
       }
     }, 250)
     return () => {
       cancelled = true
       clearTimeout(t)
     }
-  }, [text, places])
+  }, [query, places, bias])
 
   async function pick(s: Suggestion) {
     setOpen(false)
     setText('')
-    const place = s.prediction.toPlace()
-    await place.fetchFields({ fields: ['id', 'displayName', 'formattedAddress', 'location'] })
     token.current = null // a session ends after a selection
-    onChange({ placeId: place.id, name: place.displayName ?? s.main, address: place.formattedAddress ?? s.secondary, lat: place.location?.lat() ?? null, lng: place.location?.lng() ?? null })
+    try {
+      const place = s.prediction.toPlace()
+      await place.fetchFields({ fields: ['id', 'displayName', 'formattedAddress', 'location'] })
+      const loc: Location = { placeId: place.id, name: place.displayName ?? s.main, address: place.formattedAddress ?? s.secondary, lat: place.location?.lat() ?? null, lng: place.location?.lng() ?? null }
+      // The same place in the local language, for drivers and local ride apps.
+      if (localLanguage && places) {
+        try {
+          const local = new places.Place({ id: place.id, requestedLanguage: localLanguage })
+          await local.fetchFields({ fields: ['displayName', 'formattedAddress'] })
+          if (local.displayName) loc.localName = local.displayName
+          if (local.formattedAddress) loc.localAddress = local.formattedAddress
+        } catch (err) {
+          console.warn('Local-language place details failed', err)
+        }
+      }
+      onChange(loc)
+    } catch (err) {
+      console.warn('Place details failed', err)
+      // Keep what the suggestion showed rather than losing the choice.
+      onChange({ placeId: s.placeId, name: s.main, address: s.secondary, lat: null, lng: null })
+      setError('Couldn’t load that place’s details, so it won’t show on the map. Try picking it again.')
+    }
   }
 
   // Short queries show nothing rather than stale results.
-  const shown = text.trim().length < 2 ? [] : suggestions
+  const shown = query.length < 2 ? [] : suggestions
+  const keepTyped = () => {
+    if (!query) return
+    setOpen(false)
+    setText('')
+    onChange(typedPlace(query))
+  }
+  // Rows: suggestions, then "use as typed".
+  const rowCount = shown.length + (query.length >= 2 ? 1 : 0)
 
   if (value) {
     return (
@@ -101,11 +157,13 @@ function PlacesAutocomplete({ id, value, onChange }: Props) {
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium">{value.name}</p>
             {value.address && <p className="truncate text-sm text-muted-foreground">{value.address}</p>}
+            {value.lat === null && <p className="text-sm text-muted-foreground">Not on the map: pick a search result to pin it.</p>}
           </div>
           <button type="button" className="inline-flex size-11 items-center justify-center rounded-full hover:bg-foreground/6" aria-label="Remove location" onClick={() => onChange(null)}>
             <X className="size-4" />
           </button>
         </div>
+        {error && <p className="text-sm text-destructive">{error}</p>}
       </div>
     )
   }
@@ -114,32 +172,42 @@ function PlacesAutocomplete({ id, value, onChange }: Props) {
   return (
     <div className="relative space-y-2">
       <Label htmlFor={id}>Location</Label>
-      <Input
-        id={id}
-        role="combobox"
-        aria-expanded={open && shown.length > 0}
-        aria-controls={listId}
-        aria-autocomplete="list"
-        aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
-        placeholder="Search for a place"
-        value={text}
-        autoComplete="off"
-        onChange={(e) => {
-          setText(e.target.value)
-          setOpen(true)
-        }}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        onKeyDown={(e) => {
-          if (e.key === 'ArrowDown') setActive((a) => Math.min(a + 1, shown.length - 1))
-          else if (e.key === 'ArrowUp') setActive((a) => Math.max(a - 1, 0))
-          else if (e.key === 'Enter' && active >= 0 && shown[active]) {
-            e.preventDefault()
-            void pick(shown[active])
-          }
-        }}
-      />
-      {open && shown.length > 0 && (
-        <ul id={listId} role="listbox" className="glass-strong absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-2xl p-1">
+      <div className="relative">
+        <Input
+          id={id}
+          role="combobox"
+          aria-expanded={open && rowCount > 0}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
+          placeholder="Search for a place"
+          value={text}
+          autoComplete="off"
+          onChange={(e) => {
+            setText(e.target.value)
+            setOpen(true)
+            setError(null)
+          }}
+          onFocus={() => setOpen(true)}
+          // Leaving the field with text still in it (e.g. tapping Add) keeps it as typed rather than dropping it.
+          // Choosing a suggestion doesn't blur: the options cancel mousedown.
+          onBlur={() => (query ? keepTyped() : setOpen(false))}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown') setActive((a) => Math.min(a + 1, rowCount - 1))
+            else if (e.key === 'ArrowUp') setActive((a) => Math.max(a - 1, 0))
+            else if (e.key === 'Enter' && query) {
+              e.preventDefault()
+              if (active >= 0 && shown[active]) void pick(shown[active])
+              else if (active === shown.length || shown.length === 0) keepTyped()
+              else void pick(shown[0]!)
+            }
+          }}
+        />
+        {busy && <Loader2 className="absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin text-muted-foreground" aria-label="Searching" />}
+      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      {open && rowCount > 0 && (
+        <ul id={listId} role="listbox" className="glass-strong absolute inset-x-0 top-full z-50 mt-1 max-h-72 overflow-y-auto rounded-2xl p-1">
           {shown.map((s, i) => (
             <li
               key={s.placeId}
@@ -156,6 +224,21 @@ function PlacesAutocomplete({ id, value, onChange }: Props) {
               {s.secondary && <span className="text-sm">{s.secondary}</span>}
             </li>
           ))}
+          <li
+            id={`${listId}-${shown.length}`}
+            role="option"
+            aria-selected={active === shown.length}
+            className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-xl px-3 py-1.5 text-primary ${active === shown.length ? 'bg-foreground/8' : ''}`}
+            onMouseDown={(e) => {
+              e.preventDefault()
+              keepTyped()
+            }}
+          >
+            <PenLine className="size-4 shrink-0" aria-hidden />
+            <span className="truncate">
+              Use “{query}” as typed{shown.length === 0 && !busy ? ' (no matches found)' : ''}
+            </span>
+          </li>
         </ul>
       )}
     </div>

@@ -4,11 +4,13 @@ import type { StayOnDay } from '@/shared/itinerary'
 import { formatTime } from '@/shared/dates'
 
 /** Where you're sleeping tonight (or checking out from), as one quiet line. */
-export function StayBanner({ info, onOpen }: { info: StayOnDay<Item>; onOpen(): void }) {
+export function StayBanner({ info, isToday = false, onOpen }: { info: StayOnDay<Item>; isToday?: boolean; onOpen(): void }) {
   const { stay, sleeping, checkingIn, checkingOut } = info
-  let detail = 'Tonight'
-  if (checkingIn) detail = stay.checkIn?.time ? `Check in ${formatTime(stay.checkIn.time)}` : 'Check in today'
-  if (checkingOut && !sleeping) detail = stay.checkOut?.time ? `Check out ${formatTime(stay.checkOut.time)}` : 'Check out today'
+  // "today"/"Tonight" only when the day shown really is today.
+  const when = isToday ? ' today' : ''
+  let detail = isToday ? 'Tonight' : 'Sleeping here'
+  if (checkingIn) detail = stay.checkIn?.time ? `Check in ${formatTime(stay.checkIn.time)}` : `Check in${when}`
+  if (checkingOut && !sleeping) detail = stay.checkOut?.time ? `Check out ${formatTime(stay.checkOut.time)}` : `Check out${when}`
   return (
     <button type="button" onClick={onOpen} className="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-card px-4 text-left ring-1 ring-border/70 outline-none active:bg-foreground/[0.06] focus-visible:ring-[3px] focus-visible:ring-ring/50">
       <BedDouble className="size-5 shrink-0 text-indigo-600 dark:text-indigo-400" aria-hidden />

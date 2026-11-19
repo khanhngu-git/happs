@@ -55,7 +55,7 @@ function NeedsConfirmation({ shares, batches, onOpenBatch }: { shares: Share[]; 
           </li>
         ))}
         {single.map((s) => (
-          <ShareRow key={s.id} share={s} />
+          <ShareRow key={`${s.expenseId}/${s.id}`} share={s} />
         ))}
       </ul>
     </Group>
@@ -67,14 +67,25 @@ function PersonRow({ uid, pair, onOpen }: { uid: string; pair: PairDebt; onOpen(
   const { nameOf, membersById, trip, me } = useTrip()
   const m = membersById.get(uid)
   const waiting = pair.awaitingMinor === pair.totalMinor
-  const sub = waiting ? (pair.fromUid === me ? `Waiting for ${nameOf(uid)} to confirm` : 'Says they’ve paid') : pair.awaitingMinor > 0 ? 'Partly paid' : null
+  const disputed = pair.shares.filter((s) => s.status === 'disputed').length
+  const sub = disputed
+    ? pair.fromUid === me
+      ? `${nameOf(uid)} hasn’t received ${disputed === 1 ? 'a payment' : `${disputed} payments`}. Check and send again`
+      : `You marked ${disputed === 1 ? 'a payment' : `${disputed} payments`} as not received`
+    : waiting
+      ? pair.fromUid === me
+        ? `Waiting for ${nameOf(uid)} to confirm`
+        : 'Says they’ve paid'
+      : pair.awaitingMinor > 0
+        ? 'Partly paid'
+        : null
   return (
     <li>
       <button type="button" onClick={onOpen} className="flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left active:bg-foreground/[0.06]">
         <UserAvatar name={m?.displayName} photoURL={m?.photoURL} className="size-9" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[1.0625rem]">{nameOf(uid)}</span>
-          {sub && <span className="block text-[0.875rem] text-muted-foreground">{sub}</span>}
+          {sub && <span className={cn('block text-[0.875rem]', disputed ? 'font-medium text-destructive' : 'text-muted-foreground')}>{sub}</span>}
         </span>
         <span className="text-[1.0625rem] font-semibold tabular-nums">{formatMoney(pair.totalMinor, trip.baseCurrency)}</span>
         <ChevronRight className="size-4 shrink-0 text-muted-foreground/70" aria-hidden />
@@ -85,7 +96,7 @@ function PersonRow({ uid, pair, onOpen }: { uid: string; pair: PairDebt; onOpen(
 
 /** Everything between me and one person, with the one action that matters. */
 function PersonSheet({ pair, shares, expensesById, onOpenChange }: { pair: PairDebt | null; shares: Share[]; expensesById: Map<string, Expense>; onOpenChange(o: boolean): void }) {
-  const { me, nameOf, trip } = useTrip()
+  const { me, nameOf, trip, membersById } = useTrip()
   const [settling, setSettling] = useState(false)
   if (!pair) return null
   const iOwe = pair.fromUid === me
@@ -104,7 +115,7 @@ function PersonSheet({ pair, shares, expensesById, onOpenChange }: { pair: PairD
           {iOwe ? (
             <ul className={listCls}>
               {full.map((s) => (
-                <li key={s.id} className="flex min-h-12 items-center gap-3 px-4 py-2.5">
+                <li key={`${s.expenseId}/${s.id}`} className="flex min-h-12 items-center gap-3 px-4 py-2.5">
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{expensesById.get(s.expenseId)?.title ?? s.expenseTitle}</span>
                     {s.status !== 'unpaid' && <span className="block text-[0.875rem] text-muted-foreground">{SHARE_STATUS_LABEL[s.status]}</span>}
@@ -116,10 +127,10 @@ function PersonSheet({ pair, shares, expensesById, onOpenChange }: { pair: PairD
           ) : (
             <ul className={listCls}>
               {full.map((s) => (
-                <div key={s.id}>
+                <li key={`${s.expenseId}/${s.id}`}>
                   <p className="px-4 pt-3 font-medium">{expensesById.get(s.expenseId)?.title ?? s.expenseTitle}</p>
                   <ShareRow share={s} secondary />
-                </div>
+                </li>
               ))}
             </ul>
           )}
@@ -136,6 +147,9 @@ function PersonSheet({ pair, shares, expensesById, onOpenChange }: { pair: PairD
         onOpenChange={setSettling}
         title={`Pay ${nameOf(other)}`}
         description={`${formatMoney(settleTotal, trip.baseCurrency)} in one payment.`}
+        payTo={membersById.get(other)?.payTo}
+        amountMinor={settleTotal}
+        currency={trip.baseCurrency}
         onSubmit={async (d) => {
           try {
             await settleAll(trip.id, me, other, full, d)
@@ -169,10 +183,10 @@ function BatchSheet({ batch, shares, expensesById, onOpenChange }: { batch: Sett
           </DialogHeader>
           <ul className="divide-y divide-border/70 overflow-hidden rounded-[1.25rem] bg-card ring-1 ring-border/70">
             {inBatch.map((s) => (
-              <div key={s.id}>
+              <li key={`${s.expenseId}/${s.id}`}>
                 <p className="px-4 pt-3 text-sm font-semibold">{expensesById.get(s.expenseId)?.title ?? s.expenseTitle}</p>
                 <ShareRow share={s} secondary />
-              </div>
+              </li>
             ))}
           </ul>
           {batch.status === 'sent' && batch.toUid === me && (

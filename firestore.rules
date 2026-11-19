@@ -86,9 +86,19 @@ service cloud.firestore {
 
     /* ---------------- users ---------------- */
 
+    // Optional payment details (PayID, PayPal.me name, bank details), short strings only.
+    function validPayTo(v) {
+      return v == null || (v is map
+        && v.keys().hasOnly(['payId', 'paypalMe', 'bank'])
+        && (!('payId' in v) || isStr(v.payId, 100))
+        && (!('paypalMe' in v) || isStr(v.paypalMe, 100))
+        && (!('bank' in v) || isStr(v.bank, 200)));
+    }
+
     match /users/{userId} {
       function validUser(d) {
-        return d.keys().hasOnly(['displayName', 'email', 'photoURL', 'defaultCurrency', 'createdAt', 'notificationPrefs'])
+        return d.keys().hasOnly(['displayName', 'email', 'photoURL', 'defaultCurrency', 'createdAt', 'notificationPrefs', 'payTo'])
+          && validPayTo(d.get('payTo', null))
           && isStr(d.displayName, 100)
           && (!('defaultCurrency' in d) || isCurrency(d.defaultCurrency))
           && (!('notificationPrefs' in d) || d.notificationPrefs is map);
@@ -121,8 +131,11 @@ service cloud.firestore {
       function validTrip(d) {
         return d.keys().hasAll(['name', 'startDate', 'endDate', 'timeZone', 'baseCurrency', 'ownerId', 'memberIds'])
           && d.keys().hasOnly(['name', 'destination', 'startDate', 'endDate', 'timeZone', 'baseCurrency',
-                               'ownerId', 'memberIds', 'coverEmoji', 'coverColor', 'coverPhotoURL', 'createdAt', 'updatedAt'])
+                               'ownerId', 'memberIds', 'coverEmoji', 'coverColor', 'coverPhotoURL', 'createdAt', 'updatedAt',
+                               'shareToken'])
           && isNonEmptyStr(d.name, 100)
+          // Read-only link token: long and random, or off.
+          && (d.get('shareToken', null) == null || (d.shareToken is string && d.shareToken.matches('^[A-Za-z0-9]{24,64}$')))
           && optStr(d, 'destination', 200)
           && (d.get('coverPhotoURL', null) == null || isStr(d.coverPhotoURL, 2000))
           && isDate(d.startDate) && isDate(d.endDate) && d.startDate <= d.endDate
@@ -157,13 +170,15 @@ service cloud.firestore {
           && memberId == me()
           && !exists(tripPath(tripId))
           && getAfter(tripPath(tripId)).data.ownerId == me()
-          && request.resource.data.keys().hasOnly(['role', 'displayName', 'photoURL', 'joinedAt'])
+          && request.resource.data.keys().hasOnly(['role', 'displayName', 'photoURL', 'joinedAt', 'payTo'])
+          && validPayTo(request.resource.data.get('payTo', null))
           && request.resource.data.role == 'owner';
 
         // Members update their own name/photo; the owner changes roles.
         allow update: if signedIn() && (
-          (memberId == me() && isMember(tripId) && onlyChanges(['displayName', 'photoURL'])
-            && isStr(request.resource.data.displayName, 100))
+          (memberId == me() && isMember(tripId) && onlyChanges(['displayName', 'photoURL', 'payTo'])
+            && isStr(request.resource.data.displayName, 100)
+            && validPayTo(request.resource.data.get('payTo', null)))
           || (isOwner(tripId) && onlyChanges(['role']) && request.resource.data.role in ['owner', 'member'])
         );
 
@@ -194,6 +209,34 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      /* ---- ideas (not yet scheduled; members vote) ---- */
+      match /ideas/{ideaId} {
+        function validIdea(d) {
+          return d.keys().hasAll(['title', 'createdBy', 'votes'])
+            && d.keys().hasOnly(['title', 'type', 'location', 'note', 'votes', 'createdBy', 'createdAt'])
+            && isNonEmptyStr(d.title, 200)
+            && (!('type' in d) || d.type in ['activity', 'food', 'transport', 'stay', 'other'])
+            && optStr(d, 'note', 1000)
+            && (d.get('location', null) == null || (d.location is map
+                && d.location.keys().hasOnly(['placeId', 'name', 'address', 'lat', 'lng', 'localName', 'localAddress'])
+                && isStr(d.location.name, 300)))
+            && d.votes is list && d.votes.size() <= 50;
+        }
+        allow read: if isMember(tripId);
+        allow create: if isMember(tripId)
+          && validIdea(request.resource.data)
+          && request.resource.data.createdBy == me()
+          && request.resource.data.votes in [[], [me()]];
+        // Anyone votes or unvotes only for themselves; the creator edits the text.
+        allow update: if isMember(tripId) && validIdea(request.resource.data) && (
+          (onlyChanges(['votes'])
+            && request.resource.data.votes.toSet().difference(resource.data.votes.toSet()).union(
+                 resource.data.votes.toSet().difference(request.resource.data.votes.toSet())) == [me()].toSet())
+          || (resource.data.createdBy == me() && onlyChanges(['title', 'type', 'location', 'note']))
+        );
+        allow delete: if isMember(tripId) && (resource.data.createdBy == me() || isOwner(tripId));
+      }
+
       /* ---- itinerary items ---- */
       match /items/{itemId} {
         function validDateTime(v) {
@@ -202,8 +245,10 @@ service cloud.firestore {
 
         function validLocation(v) {
           return v == null || (v is map
-            && v.keys().hasOnly(['placeId', 'name', 'address', 'lat', 'lng'])
+            && v.keys().hasOnly(['placeId', 'name', 'address', 'lat', 'lng', 'localName', 'localAddress'])
             && isStr(v.name, 300)
+            && (!('localName' in v) || isStr(v.localName, 300))
+            && (!('localAddress' in v) || isStr(v.localAddress, 500))
             && (v.lat == null || (v.lat is number && v.lat >= -90 && v.lat <= 90))
             && (v.lng == null || (v.lng is number && v.lng >= -180 && v.lng <= 180)));
         }
@@ -211,7 +256,7 @@ service cloud.firestore {
         function validItem(d) {
           return d.keys().hasAll(['type', 'title', 'date', 'createdBy'])
             && d.keys().hasOnly(['type', 'title', 'date', 'startTime', 'endTime', 'checkIn', 'checkOut', 'location',
-                                 'notes', 'bookingUrl', 'bookingRef', 'order', 'linkedExpenseId', 'photoURL', 'createdBy',
+                                 'notes', 'bookingUrl', 'bookingRef', 'order', 'linkedExpenseId', 'photoURL', 'attachments', 'createdBy',
                                  'createdAt', 'updatedAt'])
             && d.type in ['activity', 'food', 'transport', 'stay', 'other']
             && isNonEmptyStr(d.title, 200)
@@ -221,6 +266,7 @@ service cloud.firestore {
             && validDateTime(d.get('checkIn', null))
             && validDateTime(d.get('checkOut', null))
             && validLocation(d.get('location', null))
+            && (!('attachments' in d) || (d.attachments is list && d.attachments.size() <= 10))
             && optStr(d, 'notes', 5000)
             && optStr(d, 'bookingUrl', 2000)
             && optStr(d, 'bookingRef', 200)
@@ -249,7 +295,7 @@ service cloud.firestore {
                                  'splitMethod', 'participantIds', 'splitValues', 'category', 'date', 'linkedItemId',
                                  'createdBy', 'createdAt', 'updatedAt'])
             && isNonEmptyStr(d.title, 200)
-            && d.amountMinor is int && d.amountMinor >= 0
+            && d.amountMinor is int && d.amountMinor > 0
             && isCurrency(d.currency)
             && d.fxRateToBase is number && d.fxRateToBase > 0
             && d.amountBaseMinor is int && d.amountBaseMinor >= 0
@@ -406,6 +452,26 @@ service cloud.firestore {
         && isStr(request.resource.data.userAgent, 500)
         && isStr(request.resource.data.url, 500);
       allow read, update, delete: if false;
+    }
+
+    /* ---------------- client error reports ---------------- */
+    // Uncaught errors from the app (src/lib/errorReporting.ts). Write-only, size-capped.
+    match /clientErrors/{errorId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'message', 'stack', 'url', 'appVersion', 'userAgent', 'createdAt'])
+        && request.resource.data.uid == me()
+        && isNonEmptyStr(request.resource.data.message, 1000)
+        && isStr(request.resource.data.stack, 4000)
+        && isStr(request.resource.data.url, 500)
+        && isStr(request.resource.data.appVersion, 40)
+        && isStr(request.resource.data.userAgent, 500);
+      allow read, update, delete: if false;
+    }
+
+    /* ---------------- usage counters ---------------- */
+    // Daily allowances for paid calls (functions/src/quota.ts). Server only.
+    match /usage/{id} {
+      allow read, write: if false;
     }
   }
 }
