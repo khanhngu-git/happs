@@ -18,6 +18,9 @@ import { StayBanner } from './StayBanner'
 import { useItineraryDialogs } from './ItineraryDialogs'
 import { reorderItems, useItems } from './itineraryApi'
 import { useTripDay } from './useTripDay'
+import { AddMenu } from './AddMenu'
+import { BookingSheet } from '@/features/booking/BookingSheet'
+import type { BookingKind } from '@/shared/booking'
 
 function SortableRow({ item, onOpen }: { item: Item; onOpen(): void }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
@@ -69,6 +72,8 @@ export function ItineraryTab() {
   const { days, day, index, today, setDay, step } = useTripDay(trip)
   const { dialogs, openItem, addItem } = useItineraryDialogs(items)
   const [reordering, setReordering] = useState(false)
+  const [menu, setMenu] = useState(false)
+  const [booking, setBooking] = useState<BookingKind | null>(null)
   const swipe = useSwipe(() => step(1), () => step(-1))
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -179,7 +184,9 @@ export function ItineraryTab() {
         )}
       </div>
 
-      <Fab label="Add activity" withTabBar onClick={() => addItem(day)} />
+      <Fab label="Add to the plan" withTabBar onClick={() => setMenu(true)} />
+      <AddMenu open={menu} onOpenChange={setMenu} onPick={(k) => (k === 'own' ? addItem(day) : setBooking(k))} />
+      <BookingSheet kind={booking} onKind={setBooking} onOpenChange={(o) => !o && setBooking(null)} items={items} day={day} />
       {dialogs}
     </main>
   )
