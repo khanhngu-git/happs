@@ -12,7 +12,7 @@ import { defineSecret } from 'firebase-functions/params'
 import { logger } from 'firebase-functions/v2'
 import { db } from './admin'
 import { parseInput, requireAuth } from './util'
-import { actorInput, hotelSearchInput, normalizeHotels, type HotelResult } from '@shared/hotelFinder'
+import { actorInput, hotelPageUrl, hotelReviewsInput, hotelSearchInput, normalizeHotels, normalizeReviews, type HotelResult, type HotelReviews } from '@shared/hotelFinder'
 import { diffDays } from '@shared/dates'
 
 const APIFY_TOKEN = defineSecret('APIFY_TOKEN')
@@ -65,4 +65,54 @@ export const hotelFinder = onCall({ secrets: [APIFY_TOKEN], timeoutSeconds: 180,
   cache.set(key, { at: Date.now(), hotels })
   logger.info(`hotelFinder: ${hotels.length} hotels for ${q.destination} ${q.checkIn}→${q.checkOut}`)
   return { hotels, cached: false }
+})
+
+/* ---------- Guest reviews ---------- */
+
+const REVIEWS_ACTOR = 'knagymate~trip-com-reviews-scraper'
+const REVIEWS_LIMIT = 10
+const REVIEWS_CACHE_MS = 6 * 60 * 60 * 1000
+const reviewsCache = new Map<string, { at: number; reviews: HotelReviews }>()
+
+/**
+ * The 10 most relevant Trip.com guest reviews for a hotel, via the Apify
+ * Actor "knagymate/trip-com-reviews-scraper" (about US$0.004 per review).
+ * Loaded on demand from the hotel details; cached for 6 hours per hotel.
+ */
+export const hotelReviews = onCall({ secrets: [APIFY_TOKEN], timeoutSeconds: 150, memory: '256MiB' }, async (req) => {
+  const uid = requireAuth(req.auth)
+  const q = parseInput(hotelReviewsInput, req.data)
+  const trip = await db.doc(`trips/${q.tripId}`).get()
+  if (!trip.exists || !(trip.get('memberIds') as string[]).includes(uid)) throw new HttpsError('permission-denied', 'Only trip members can read reviews for this trip.')
+
+  const hit = reviewsCache.get(q.hotelId)
+  if (hit && Date.now() - hit.at < REVIEWS_CACHE_MS) return { ...hit.reviews, cached: true }
+
+  const token = APIFY_TOKEN.value()
+  if (!token) throw new HttpsError('failed-precondition', 'Reviews aren’t set up yet: the Apify token is missing.')
+
+  const url = `https://api.apify.com/v2/acts/${REVIEWS_ACTOR}/run-sync-get-dataset-items?timeout=120&maxItems=${REVIEWS_LIMIT}&clean=true&format=json`
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ hotelUrl: hotelPageUrl(q.hotelId), maxReviews: REVIEWS_LIMIT, sortBy: 'mostRelevant' }),
+      signal: AbortSignal.timeout(140_000),
+    })
+  } catch (err) {
+    logger.warn('Apify reviews request failed', err)
+    throw new HttpsError('deadline-exceeded', 'Reviews took too long to load. Try again in a minute.')
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    logger.warn('Apify reviews run failed', { status: res.status, body: body.slice(0, 300) })
+    if (res.status === 401) throw new HttpsError('failed-precondition', 'The Apify token was rejected. Check APIFY_TOKEN.')
+    if (res.status === 402) throw new HttpsError('resource-exhausted', 'The Apify account is out of credit.')
+    if (res.status === 408) throw new HttpsError('deadline-exceeded', 'Reviews took too long to load. Try again in a minute.')
+    throw new HttpsError('unavailable', 'Couldn’t load reviews this time. Try again.')
+  }
+  const reviews = normalizeReviews(await res.json().catch(() => []))
+  reviewsCache.set(q.hotelId, { at: Date.now(), reviews })
+  return { ...reviews, cached: false }
 })

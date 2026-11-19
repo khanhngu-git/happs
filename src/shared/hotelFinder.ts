@@ -117,3 +117,81 @@ export function actorInput(q: z.output<typeof hotelSearchInput>, currency: strin
     totalLimit: limit,
   }
 }
+
+/* ---------- Guest reviews (Apify Actor "knagymate/trip-com-reviews-scraper") ---------- */
+
+export interface HotelReview {
+  id: string
+  author: string | null
+  rating: number | null
+  /** YYYY-MM-DD */
+  date: string | null
+  travelType: string | null
+  text: string
+  /** True when `text` is a translation of a review written in another language. */
+  translated: boolean
+}
+
+export interface HotelReviews {
+  score: number | null
+  scoreText: string | null
+  count: number | null
+  subScores: { name: string; score: number }[]
+  reviews: HotelReview[]
+}
+
+export const hotelReviewsInput = z.object({
+  tripId: z.string().min(1),
+  /** Trip.com hotel id from the finder (digits only). */
+  hotelId: z.string().regex(/^\d{3,15}$/, 'Unknown hotel'),
+})
+export type HotelReviewsInput = z.input<typeof hotelReviewsInput>
+
+/** Trip.com hotel page for a hotel id; the reviews Actor takes a hotel URL. */
+export function hotelPageUrl(hotelId: string): string {
+  return `https://www.trip.com/hotels/detail/?hotelId=${encodeURIComponent(hotelId)}`
+}
+
+/** Can this finder result have reviews fetched (i.e. do we have a real Trip.com id)? */
+export function hasReviews(h: Pick<HotelResult, 'id'>): boolean {
+  return /^\d{3,15}$/.test(h.id)
+}
+
+export function normalizeReviews(items: unknown): HotelReviews {
+  const list = (Array.isArray(items) ? items : []).map(obj)
+  const first = list[0] ?? {}
+  const subScores = (Array.isArray(first.aggregateReviewSubScore) ? first.aggregateReviewSubScore : []).flatMap((s) => {
+    const o = obj(s)
+    const name = str(o.name) || str(o.title) || str(o.subItemName)
+    const score = num(o.score ?? o.value ?? o.subScore)
+    return name && score !== null ? [{ name, score }] : []
+  })
+  const seen = new Set<string>()
+  const reviews = list.flatMap((r): HotelReview[] => {
+    const original = str(r.content)
+    const translation = str(r.translatedContent)
+    const text = translation || original
+    const id = str(r.id) || text.slice(0, 40)
+    if (!text || seen.has(id)) return []
+    seen.add(id)
+    const date = str(r.createDate).slice(0, 10)
+    return [
+      {
+        id,
+        author: str(r.userNickName) || null,
+        rating: num(r.rating),
+        date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null,
+        travelType: str(r.travelTypeText) || null,
+        text: text.length > 800 ? `${text.slice(0, 797).trimEnd()}…` : text,
+        translated: !!translation && translation !== original,
+      },
+    ]
+  })
+  return {
+    score: num(first.aggregateReviewScore),
+    scoreText: str(first.aggregateReviewDescription) || null,
+    count: num(first.aggregateReviewCount),
+    subScores: subScores.slice(0, 6),
+    reviews,
+  }
+}
