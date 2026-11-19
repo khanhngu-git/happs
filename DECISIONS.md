@@ -74,3 +74,12 @@ The `liquid-glass` skill (github.com/heyparsadev/liquid-glass-skill) targets Swi
 ## Test isolation
 - `npm run test:rules` and `npm run test:e2e` start their own emulators on separate ports (`firebase.rules-test.json`, `firebase.e2e.json`). E2E runs its own dev server on :5174 with the Auth emulator forced on. Tests can't create real accounts, even when your dev setup uses real Google sign-in, and they don't disturb your dev emulators.
 - **Per-suite emulator temp dirs.** The Storage emulator stores blobs in `$TMPDIR/firebase/storage/blobs` and removes the folder on shutdown. Dev, rules-test and e2e suites shared it, so a finished test run deleted the dev suite's blob folder, and the next upload crashed it (`ENOENT` in `persistence.appendBytes`). Every npm emulator script now sets its own `TMPDIR` under `.emulator-tmp/`.
+
+## Hotel finder via Apify (RouteStack removed)
+- RouteStack was removed completely (reverted to the pre-RouteStack code). Hotels now come from the Apify Actor `hotels-scrapers/trip-hotel-scraper`, which scrapes live Trip.com listings.
+- **Not MCP inside the app.** The app can't use an MCP server. The `hotelFinder` callable uses Apify's REST API (`run-sync-get-dataset-items`), with the token as a Functions secret. The Apify MCP server is only configured for Claude Code in this project.
+- **One small run per search:** one page and up to 20 hotels, searched by the free-text destination, in the trip's base currency. Results are cached in memory for 30 minutes per search, so retries and back-navigation don't cost again.
+- **Prefill, not auto-save:** choosing a hotel opens the normal form as a stay, with check-in/out dates, photo, notes (room, features, area) and the total as a shared cost (paid by you, split equally). The person reviews and saves.
+- **Location:** Trip.com listings have no coordinates (only text like "0.8 km from Eiffel Tower"), so the app looks the hotel up with Google Places text search using the existing Maps key. If that fails it saves a name-only location.
+- **Totals:** the listing's total when shown, otherwise nightly × nights, marked "est." (taxes may be extra).
+- **Long call:** the callable has a 180 s timeout on both ends (the Apify sync run is capped at 150 s), and the sheet shows a running timer.

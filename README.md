@@ -85,6 +85,22 @@ The client config for project `happss` goes in `.env.local` (see `.env.example`)
 
 Never commit service account keys. The Admin SDK key isn't needed for any of the above: deployed functions use their default service account, and local dev uses the emulators.
 
+## Hotel finder (Apify · Trip.com)
+
+The itinerary's **+** → **Find a hotel** searches live Trip.com listings for the trip's destination, dates and group size. It uses the Apify Actor [`hotels-scrapers/trip-hotel-scraper`](https://apify.com/hotels-scrapers/trip-hotel-scraper). Choosing a hotel prefills a stay with:
+- the hotel name and check-in/check-out dates
+- the location, found with Google Places, so the stay appears on the map
+- a photo
+- the price as a shared cost in the trip's currency, paid by you and split equally
+
+You review the stay before saving it. Nothing is booked in the app.
+
+- The Apify token lives only in Cloud Functions (`functions/src/hotelFinder.ts`, secret `APIFY_TOKEN`).
+- **Local:** add it to `functions/.secret.local` (git-ignored) as `APIFY_TOKEN=...`, then restart the emulators.
+- **Deploy:** `firebase functions:secrets:set APIFY_TOKEN`.
+- **Cost:** each search is one Actor run, about US$0.07 for 20 hotels with residential proxies. Identical searches within 30 minutes are reused. Only trip members can search.
+- A search takes roughly 20–90 seconds (a real browser scrape), so the app shows a timer.
+
 ## How the money works
 
 - Amounts are **integers in minor units** (cents, fen, yen). `src/shared/money.ts` parses user input with string arithmetic. Floats appear only transiently when applying an FX rate, and the result is rounded straight back to an integer.
