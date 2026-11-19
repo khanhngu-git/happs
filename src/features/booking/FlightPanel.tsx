@@ -1,0 +1,143 @@
+import { useState } from 'react'
+import { ChevronLeft, Plane } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { useTrip } from '@/features/trips/TripContext'
+import { api, callableMessage } from '@/lib/functions'
+import type { Item } from '@/lib/firestore'
+import { formatMoney } from '@/shared/money'
+import { formatShortDate, formatTime } from '@/shared/dates'
+import type { FlightOffer, PlaceOption } from '@/shared/booking'
+import { PlaceField } from './PlaceField'
+import { BookActions, ResultsState, Stepper } from './shared'
+import { addFlight } from './addToItinerary'
+
+const hm = (min: number) => `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, '0')}m`
+const t = (iso: string) => formatTime(iso.slice(11, 16))
+
+export function FlightPanel({ items, onDone }: { items: Item[]; onDone(): void }) {
+  const { trip, me, members } = useTrip()
+  const [from, setFrom] = useState<PlaceOption | null>(null)
+  const [to, setTo] = useState<PlaceOption | null>(null)
+  const [returnTrip, setReturnTrip] = useState(true)
+  const [date, setDate] = useState(trip.startDate)
+  const [returnDate, setReturnDate] = useState(trip.endDate)
+  const [adults, setAdults] = useState(Math.max(1, members.length))
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [results, setResults] = useState<FlightOffer[] | null>(null)
+  const [picked, setPicked] = useState<FlightOffer | null>(null)
+
+  async function search() {
+    if (!from || !to) return setError('Choose where you’re flying from and to.')
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await api.booking({ action: 'flights', tripId: trip.id, from: from.id, to: to.id, date, returnDate: returnTrip ? returnDate : null, adults, cabin: 'Economy' })
+      setResults(res.flights ?? [])
+    } catch (err) {
+      setError(callableMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (picked) {
+    return (
+      <div className="space-y-4">
+        <button type="button" onClick={() => setPicked(null)} className="inline-flex h-11 items-center text-[1.0625rem] text-primary">
+          <ChevronLeft className="size-6" aria-hidden /> Flights
+        </button>
+        <ol className="divide-y divide-border/70 overflow-hidden rounded-2xl bg-card ring-1 ring-border/70">
+          {picked.legs.map((l, i) => (
+            <li key={i} className="px-4 py-3">
+              <p className="font-semibold">
+                {t(l.depart)} {l.from} → {t(l.arrive)} {l.to}
+              </p>
+              <p className="text-[0.875rem] text-muted-foreground">
+                {l.airline} {l.flightNumber} · {formatShortDate(l.depart.slice(0, 10))} · {hm(l.durationMin)}
+              </p>
+            </li>
+          ))}
+        </ol>
+        <p className="text-[0.875rem] text-muted-foreground">
+          {picked.cabin}
+          {picked.baggage && ` · checked bag ${picked.baggage}`}
+          {picked.seatsLeft !== null && picked.seatsLeft < 9 && ` · ${picked.seatsLeft} seats left`} · price for {adults} {adults === 1 ? 'adult' : 'adults'}
+        </p>
+        <BookActions
+          kind="flight"
+          bookRef={picked.ref}
+          priceLabel={formatMoney(picked.priceMinor, picked.currency)}
+          onAdd={async () => {
+            await addFlight(trip, me, items, picked).then(
+              () => {
+                toast.success('Flight added to the itinerary')
+                onDone()
+              },
+              () => toast.error('Couldn’t add it'),
+            )
+          }}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <ToggleGroup type="single" value={returnTrip ? 'return' : 'oneway'} onValueChange={(v) => v && setReturnTrip(v === 'return')} className="w-full" aria-label="Trip type">
+        <ToggleGroupItem value="return">Return</ToggleGroupItem>
+        <ToggleGroupItem value="oneway">One way</ToggleGroupItem>
+      </ToggleGroup>
+      <PlaceField id="fl-from" label="From" kind="flight" tripId={trip.id} value={from} onChange={setFrom} placeholder="City or airport" />
+      <PlaceField id="fl-to" label="To" kind="flight" tripId={trip.id} value={to} onChange={setTo} initialQuery={trip.destination.split(',')[0] ?? ''} placeholder="City or airport" />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="fl-date">Depart</Label>
+          <Input id="fl-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        {returnTrip ? (
+          <div className="space-y-2">
+            <Label htmlFor="fl-ret">Return</Label>
+            <Input id="fl-ret" type="date" min={date} value={returnDate} onChange={(e) => setReturnDate(e.target.value)} />
+          </div>
+        ) : (
+          <Stepper id="fl-adults" label="Travellers" value={adults} onChange={setAdults} />
+        )}
+      </div>
+      {returnTrip && <Stepper id="fl-adults2" label="Travellers" value={adults} onChange={setAdults} />}
+      <Button size="lg" className="w-full" onClick={search} disabled={busy}>
+        Search flights
+      </Button>
+      {results !== null || busy || error ? (
+        <ResultsState busy={busy} error={error} empty={results?.length === 0}>
+          <ul className="divide-y divide-border/70 overflow-hidden rounded-2xl bg-card ring-1 ring-border/70">
+            {results?.map((f) => {
+              const a = f.legs[0]!
+              const b = f.legs[f.legs.length - 1]!
+              return (
+                <li key={f.id}>
+                  <button type="button" onClick={() => setPicked(f)} className="flex min-h-16 w-full items-center gap-3 px-4 py-2.5 text-left active:bg-foreground/[0.06]">
+                    <Plane className="size-5 shrink-0 text-sky-600 dark:text-sky-400" aria-hidden />
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-semibold tabular-nums">
+                        {t(a.depart)} – {t(b.arrive)}
+                      </span>
+                      <span className="block truncate text-[0.875rem] text-muted-foreground">
+                        {a.airline} · {f.stops === 0 ? 'Nonstop' : `${f.stops} stop${f.stops > 1 ? 's' : ''}`} · {hm(f.legs.reduce((s, l) => s + l.durationMin, 0))}
+                      </span>
+                    </span>
+                    <span className="font-semibold tabular-nums">{formatMoney(f.priceMinor, f.currency)}</span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </ResultsState>
+      ) : null}
+    </div>
+  )
+}
