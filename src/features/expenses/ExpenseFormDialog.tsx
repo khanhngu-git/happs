@@ -67,7 +67,7 @@ export function ExpenseFormDialog({ open, onOpenChange, expense, items }: { open
             <Label htmlFor="exp-title">What was it?</Label>
             <Input id="exp-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Groceries, taxi, dinner…" maxLength={200} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="exp-date">Date</Label>
               <Input id="exp-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
