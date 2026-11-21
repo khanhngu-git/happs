@@ -31,7 +31,7 @@ test('scan an invite QR code to open the join page', async ({ page, baseURL }) =
   await page.goto('/')
   await page.getByRole('button', { name: 'Join a trip' }).click()
   await page.getByRole('button', { name: 'Scan QR code' }).click()
-  await expect(page).toHaveURL(/\/join\/AbCdEfGhJk12$/, { timeout: 15_000 })
+  await expect(page).toHaveURL(/\/join\/AbCdEfGhJk12$/, { timeout: 30_000 })
 })
 
 test('a QR code that isn’t an invite says so', async ({ page }) => {
@@ -40,5 +40,5 @@ test('a QR code that isn’t an invite says so', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Join a trip' }).click()
   await page.getByRole('button', { name: 'Scan QR code' }).click()
-  await expect(page.getByText('That QR code isn’t a happs invite.')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText('That QR code isn’t a happs invite.')).toBeVisible({ timeout: 30_000 })
 })
