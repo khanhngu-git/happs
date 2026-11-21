@@ -36,8 +36,6 @@ export default defineConfig({
           VITE_AUTH_SAME_ORIGIN: '',
           VITE_EMU_AUTH_PORT: '19099',
           VITE_EMU_FIRESTORE_PORT: '18080',
-          VITE_EMU_FUNCTIONS_PORT: '15001',
-          VITE_EMU_STORAGE_PORT: '19199',
         },
       },
 })

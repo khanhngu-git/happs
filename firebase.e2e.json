@@ -3,15 +3,6 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "storage": {
-    "rules": "storage.rules"
-  },
-  "functions": [
-    {
-      "source": "functions",
-      "codebase": "default"
-    }
-  ],
   "emulators": {
     "auth": {
       "host": "127.0.0.1",
@@ -21,14 +12,6 @@
       "host": "127.0.0.1",
       "port": 18080,
       "websocketPort": 19150
-    },
-    "functions": {
-      "host": "127.0.0.1",
-      "port": 15001
-    },
-    "storage": {
-      "host": "127.0.0.1",
-      "port": 19199
     },
     "hub": {
       "port": 14400
