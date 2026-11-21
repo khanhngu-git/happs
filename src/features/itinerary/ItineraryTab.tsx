@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { DndContext, KeyboardSensor, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
@@ -16,7 +16,6 @@ import { ActivityRow } from './ActivityRow'
 import { DayPicker } from './DayPicker'
 import { StayBanner } from './StayBanner'
 import { NowNextCard } from './NowNextCard'
-import { LegRow } from './LegRow'
 import { useItineraryDialogs } from './ItineraryDialogs'
 import { reorderItems, useItems } from './itineraryApi'
 import { useTripDay } from './useTripDay'
@@ -88,8 +87,6 @@ export function ItineraryTab() {
   const activities = dayItems.filter((i) => !stayIds.has(i.id))
   const anytime = activities.filter((i) => !i.startTime)
   const timed = activities.filter((i) => i.startTime)
-  // Where the day starts: the stay you slept in last night (if any), for the first "getting there".
-  const morningStay = stays.find((s) => s.checkingOut || (s.sleeping && !s.checkingIn))?.stay.location ?? null
 
   function onDragEnd(e: DragEndEvent) {
     if (!e.over || e.active.id === e.over.id) return
@@ -182,15 +179,9 @@ export function ItineraryTab() {
                   <section aria-label="Schedule">
                     {anytime.length > 0 && <h2 className="px-4 pb-1.5 pt-2 text-[0.8125rem] font-medium text-muted-foreground uppercase">Schedule</h2>}
                     <ul className="divide-y divide-border/70 overflow-hidden rounded-2xl ring-1 ring-border/70">
-                      {timed.map((i, n) => {
-                        const from = n === 0 ? morningStay : timed[n - 1]!.location
-                        return (
-                          <Fragment key={i.id}>
-                            {from && i.location && <LegRow from={from} to={i.location} toTitle={i.title} />}
-                            <ActivityRow item={i} onOpen={() => openItem(i)} />
-                          </Fragment>
-                        )
-                      })}
+                      {timed.map((i) => (
+                        <ActivityRow key={i.id} item={i} onOpen={() => openItem(i)} />
+                      ))}
                     </ul>
                   </section>
                 )}
