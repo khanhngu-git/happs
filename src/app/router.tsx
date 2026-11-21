@@ -38,6 +38,7 @@ export const router = createBrowserRouter([
               { index: true, element: <HomePage /> },
               { path: 'trips/new', lazy: lazy(() => import('@/features/trips/NewTripPage'), 'NewTripPage') },
               { path: 'notifications', lazy: lazy(() => import('@/features/notifications/NotificationsPage'), 'NotificationsPage') },
+              { path: 'import', lazy: lazy(() => import('@/features/import/ImportPage'), 'ImportPage') },
               { path: 'profile', lazy: lazy(() => import('@/features/profile/ProfilePage'), 'ProfilePage') },
               {
                 path: 'trips/:tripId',
