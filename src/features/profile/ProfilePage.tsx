@@ -76,7 +76,11 @@ function ProfileForm() {
     b.update(doc(db, 'users', user.uid), patch)
     trips.forEach((t) => b.update(doc(db, 'trips', t.id, 'members', user.uid), patch))
     await b.commit()
-    if (patch.displayName !== undefined || patch.photoURL !== undefined) await updateProfile(user, { displayName: patch.displayName, photoURL: patch.photoURL })
+    // Auth wants strings: an empty photoURL clears it (null is rejected).
+    const authPatch: { displayName?: string; photoURL?: string } = {}
+    if (patch.displayName !== undefined) authPatch.displayName = patch.displayName
+    if (patch.photoURL !== undefined) authPatch.photoURL = patch.photoURL ?? ''
+    if (Object.keys(authPatch).length) await updateProfile(user, authPatch)
   }
 
   async function saveName() {
