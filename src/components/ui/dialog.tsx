@@ -27,7 +27,7 @@ function DialogContent({ className, children, ...props }: React.ComponentProps<t
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          'glass-strong fixed z-50 grid w-full gap-4 overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]',
+          'glass-strong fixed z-50 grid w-full grid-cols-[minmax(0,1fr)] gap-4 overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]',
           'inset-x-2 bottom-2 max-h-[92dvh] w-auto rounded-[2rem] data-[state=open]:animate-in data-[state=open]:slide-in-from-bottom data-[state=closed]:animate-out data-[state=closed]:slide-out-to-bottom',
           'sm:inset-auto sm:top-1/2 sm:left-1/2 sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:rounded-[2rem] sm:data-[state=open]:slide-in-from-bottom-0 sm:data-[state=open]:zoom-in-95',
           className,
