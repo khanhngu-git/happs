@@ -347,6 +347,14 @@ describe('expenses and items', () => {
     await assertFails(updateDoc(doc(db(env, MEMBER), `trips/${TRIP}`), { shareToken: 'Xyz23'.repeat(6) }))
     await assertSucceeds(updateDoc(doc(db(env, OWNER), `trips/${TRIP}`), { shareToken: null }))
   })
+  it('items: status, to-dos and alternatives go in meta, with known values only', async () => {
+    const item = (meta: unknown) => ({ type: 'activity', title: 'Hainan Museum', date: '2026-12-06', createdBy: MEMBER, meta })
+    const good = { status: 'planned', bookingRequired: true, todo: ['booking reference'], timeZone: null, alternatives: [], needsLocationReview: true }
+    await assertSucceeds(setDoc(doc(db(env, MEMBER), `trips/${TRIP}/items/act-1`), item(good)))
+    await assertFails(setDoc(doc(db(env, MEMBER), `trips/${TRIP}/items/act-2`), item({ ...good, status: 'maybe' })))
+    await assertFails(setDoc(doc(db(env, MEMBER), `trips/${TRIP}/items/act-3`), item({ ...good, extra: 1 })))
+    await assertFails(setDoc(doc(db(env, MEMBER), `trips/${TRIP}/items/act-4`), item({ ...good, todo: Array.from({ length: 31 }, (_, i) => `x${i}`) })))
+  })
   it('items: a location may carry its local-language name and address', async () => {
     const loc = { placeId: 'p1', name: 'The Bund', address: 'Shanghai, China', lat: 31.24, lng: 121.49 }
     await assertSucceeds(setDoc(doc(db(env, MEMBER), `trips/${TRIP}/items/i7`), item(MEMBER, { location: { ...loc, localName: '外滩', localAddress: '中国上海市中山东一路' } })))

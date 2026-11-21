@@ -15,6 +15,7 @@ export interface TripInput {
   coverEmoji: string | null
   coverColor: string | null
   coverPhotoURL?: string | null
+  notes?: string
 }
 
 /** Trip + the creator's owner member doc in one batch (rules check both together). */

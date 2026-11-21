@@ -82,6 +82,7 @@ export const tripSchema = z.object({
   coverPhotoURL: z.string().nullable().default(null),
   /** Read-only link for people who aren't on the trip (owner turns it on/off). */
   shareToken: z.string().nullable().default(null),
+  notes: z.string().default(''),
   createdAt: timestamp.optional(),
   updatedAt: timestamp.optional(),
 })
@@ -143,6 +144,26 @@ export const attachmentSchema = z.object({
 export type Attachment = z.infer<typeof attachmentSchema>
 export const MAX_ATTACHMENTS = 10
 
+/** Where a plan stands. 'cancel' means it still needs cancelling. */
+export const itemStatusSchema = z.enum(['booked', 'planned', 'suggested', 'cancel'])
+export type ItemStatus = z.infer<typeof itemStatusSchema>
+
+/** Extra planning details, e.g. from an imported itinerary. */
+export const itemMetaSchema = z.object({
+  status: itemStatusSchema.nullable().default(null),
+  bookingRequired: z.boolean().default(false),
+  /** Details nobody knows yet ("booking reference", "train number"…), shown as Missing info. */
+  todo: z.array(z.string()).default([]),
+  /** When the plan happens somewhere other than the trip's time zone (e.g. the flight out). */
+  timeZone: z.string().nullable().default(null),
+  alternatives: z
+    .array(z.object({ name: z.string(), nameZh: z.string().nullable().default(null), address: z.string().nullable().default(null), url: z.string().nullable().default(null) }))
+    .default([]),
+  /** The place lookup was unsure, so the location isn't pinned yet. */
+  needsLocationReview: z.boolean().default(false),
+})
+export type ItemMeta = z.infer<typeof itemMetaSchema>
+
 export const itemSchema = z.object({
   type: itemTypeSchema,
   title: z.string(),
@@ -159,6 +180,7 @@ export const itemSchema = z.object({
   linkedExpenseId: z.string().nullable().default(null),
   photoURL: z.string().nullable().default(null),
   attachments: z.array(attachmentSchema).default([]),
+  meta: itemMetaSchema.nullable().default(null),
   createdBy: z.string(),
   createdAt: timestamp.optional(),
   updatedAt: timestamp.optional(),

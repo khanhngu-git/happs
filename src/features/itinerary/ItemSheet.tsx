@@ -9,6 +9,7 @@ import { SharesLockedError } from '@/features/expenses/expenseApi'
 import type { Item } from '@/lib/firestore'
 import { preloadAttachments } from '@/lib/uploads'
 import { FileViewer } from './FileViewer'
+import { ItemMetaSection } from './ItemMetaSection'
 import type { Attachment } from '@/shared/schemas'
 import { formatLongDate } from '@/shared/dates'
 import { ItemTypeIcon } from './ItemTypeIcon'
@@ -43,6 +44,7 @@ export function ItemSheet({ item, onOpenChange, onEdit }: { item: Item | null; o
               <DialogDescription className="text-foreground/80">{timeLabel(item)}</DialogDescription>
             </div>
           </DialogHeader>
+          <ItemMetaSection tripId={trip.id} item={item} />
           <ul className="divide-y divide-border/70 overflow-hidden rounded-2xl bg-foreground/[0.04] text-[0.9375rem]">
             <li className="flex gap-3 px-4 py-3">
               <CalendarDays className="size-5 shrink-0 text-muted-foreground" aria-hidden />

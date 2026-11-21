@@ -233,11 +233,12 @@ service cloud.firestore {
         return d.keys().hasAll(['name', 'startDate', 'endDate', 'timeZone', 'baseCurrency', 'ownerId', 'memberIds'])
           && d.keys().hasOnly(['name', 'destination', 'startDate', 'endDate', 'timeZone', 'baseCurrency',
                                'ownerId', 'memberIds', 'coverEmoji', 'coverColor', 'coverPhotoURL', 'createdAt', 'updatedAt',
-                               'shareToken'])
+                               'shareToken', 'notes'])
           && isNonEmptyStr(d.name, 100)
           // Read-only link token: long and random, or off.
           && (d.get('shareToken', null) == null || (d.shareToken is string && d.shareToken.matches('^[A-Za-z0-9]{24,64}$')))
           && optStr(d, 'destination', 200)
+          && optStr(d, 'notes', 2000)
           && isPhoto(d.get('coverPhotoURL', null), 240000)
           && isDate(d.startDate) && isDate(d.endDate) && d.startDate <= d.endDate
           && isNonEmptyStr(d.timeZone, 64)
@@ -381,10 +382,22 @@ service cloud.firestore {
             && (v.lng == null || (v.lng is number && v.lng >= -180 && v.lng <= 180)));
         }
 
+        // Status, to-dos and alternatives (e.g. from an imported itinerary).
+        function validMeta(m) {
+          return m == null || (m is map
+            && m.keys().hasOnly(['status', 'bookingRequired', 'todo', 'timeZone', 'alternatives', 'needsLocationReview'])
+            && (m.get('status', null) == null || m.status in ['booked', 'planned', 'suggested', 'cancel'])
+            && (!('bookingRequired' in m) || m.bookingRequired is bool)
+            && (!('todo' in m) || (m.todo is list && m.todo.size() <= 30))
+            && (m.get('timeZone', null) == null || isStr(m.timeZone, 64))
+            && (!('alternatives' in m) || (m.alternatives is list && m.alternatives.size() <= 10))
+            && (!('needsLocationReview' in m) || m.needsLocationReview is bool));
+        }
+
         function validItem(d) {
           return d.keys().hasAll(['type', 'title', 'date', 'createdBy'])
             && d.keys().hasOnly(['type', 'title', 'date', 'startTime', 'endTime', 'checkIn', 'checkOut', 'location',
-                                 'notes', 'bookingUrl', 'bookingRef', 'order', 'linkedExpenseId', 'photoURL', 'attachments', 'createdBy',
+                                 'notes', 'bookingUrl', 'bookingRef', 'order', 'linkedExpenseId', 'photoURL', 'attachments', 'meta', 'createdBy',
                                  'createdAt', 'updatedAt'])
             && d.type in ['activity', 'food', 'transport', 'stay', 'other']
             && isNonEmptyStr(d.title, 200)
@@ -395,6 +408,7 @@ service cloud.firestore {
             && validDateTime(d.get('checkOut', null))
             && validLocation(d.get('location', null))
             && (!('attachments' in d) || (d.attachments is list && d.attachments.size() <= 10))
+            && validMeta(d.get('meta', null))
             && optStr(d, 'notes', 5000)
             && optStr(d, 'bookingUrl', 2000)
             && optStr(d, 'bookingRef', 200)
