@@ -27,3 +27,4 @@ service-account*.json
 # Cloud Functions secrets for the emulator (never commit)
 functions/.secret.local
 functions/.env.local
+!.env.production
