@@ -70,11 +70,14 @@ function ProfileForm() {
     b.update(doc(db, 'users', user.uid), patch)
     trips.forEach((t) => b.update(doc(db, 'trips', t.id, 'members', user.uid), patch))
     await b.commit()
-    // Auth wants strings: an empty photoURL clears it (null is rejected).
+    // Keep the sign-in account roughly in step. It's only a fallback (the
+    // profile above is what the app shows), so this never fails a save.
+    // Auth takes short web links only: a photo stored as a data URL clears it,
+    // and an empty string (not null) is how Auth clears a photo.
     const authPatch: { displayName?: string; photoURL?: string } = {}
     if (patch.displayName !== undefined) authPatch.displayName = patch.displayName
-    if (patch.photoURL !== undefined) authPatch.photoURL = patch.photoURL ?? ''
-    if (Object.keys(authPatch).length) await updateProfile(user, authPatch)
+    if (patch.photoURL !== undefined) authPatch.photoURL = patch.photoURL?.startsWith('https://') ? patch.photoURL : ''
+    if (Object.keys(authPatch).length) await updateProfile(user, authPatch).catch((err) => console.warn('Couldn’t update the sign-in profile', err))
   }
 
   async function saveName() {
