@@ -9,6 +9,9 @@ test('profile photo and trip cover are saved in Firestore', async ({ page }) => 
   // Profile photo: pick a file, it's resized and saved as a small JPEG.
   await page.goto('/profile')
   await page.getByLabel('Choose a profile photo').setInputFiles(IMAGE)
+  // Frame it (square for a profile photo), then save.
+  await expect(page.getByRole('dialog', { name: 'Move and scale' })).toBeVisible()
+  await page.getByRole('button', { name: 'Choose' }).click()
   await expect(page.getByText('Photo updated')).toBeVisible()
   const avatar = page.getByRole('button', { name: 'Change profile photo' }).locator('img')
   await expect(avatar).toHaveAttribute('src', /^data:image\/jpeg;base64,/)
@@ -20,7 +23,12 @@ test('profile photo and trip cover are saved in Firestore', async ({ page }) => 
   await page.getByLabel('Starts').fill('2026-12-01')
   await page.getByLabel('Ends').fill('2026-12-03')
   await page.locator('label:has-text("Add a cover photo") input[type=file]').setInputFiles(IMAGE)
-  await expect(page.getByRole('img', { name: 'Trip cover' })).toBeVisible()
+  await page.getByRole('button', { name: 'Choose' }).click()
+  const cover = page.getByRole('img', { name: 'Trip cover' })
+  await expect(cover).toBeVisible()
+  // The square test image was cropped to the cover's 16:9 shape.
+  const ratio = await cover.evaluate((img: HTMLImageElement) => img.naturalWidth / img.naturalHeight)
+  expect(ratio).toBeCloseTo(16 / 9, 1)
   await page.getByRole('button', { name: 'Create trip' }).click()
   await expect(page).toHaveURL(/\/members/)
   await page.keyboard.press('Escape')
@@ -50,6 +58,7 @@ test('activity photo shows in the day view, and Today brings you back', async ({
   await page.getByRole('button', { name: 'Add to the plan' }).click()
   await page.getByPlaceholder('The Bund at night').fill('Sunset walk')
   await page.getByLabel('Add a photo').setInputFiles(IMAGE)
+  await page.getByRole('button', { name: 'Choose' }).click()
   await expect(page.getByRole('img', { name: 'Activity photo' })).toBeVisible()
   await page.getByRole('button', { name: 'Add', exact: true }).click()
   await expect(page.getByText('Sunset walk')).toBeVisible()

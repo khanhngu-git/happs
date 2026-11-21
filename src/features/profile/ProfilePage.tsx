@@ -19,6 +19,7 @@ import { COMMON_CURRENCIES } from '@/shared/money'
 import { DEFAULT_NOTIFICATION_PREFS, type NotificationType, type PayTo } from '@/shared/schemas'
 import { FeedbackDialog } from './FeedbackDialog'
 import { PhotoPicker } from '@/components/PhotoPicker'
+import { ASPECT } from '@/lib/crop'
 import { avatarPhoto } from '@/lib/uploads'
 import { FullScreenLoader } from '@/components/FullScreenLoader'
 
@@ -107,7 +108,7 @@ function ProfileForm() {
 
         <Group title="You">
           <div className="space-y-4 p-4">
-            <PhotoPicker label="Choose a profile photo" onPick={(f) => setPhoto(f)}>
+            <PhotoPicker label="Choose a profile photo" aspect={ASPECT.avatar} round onPick={(f) => setPhoto(f)}>
               {(busy, open) => (
                 <div className="flex items-center gap-4">
                   <button type="button" onClick={open} disabled={busy} className="relative rounded-full active:opacity-70" aria-label="Change profile photo">

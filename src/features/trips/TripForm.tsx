@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { CropDialog } from '@/components/CropDialog'
+import { ASPECT } from '@/lib/crop'
 import { useForm } from 'react-hook-form'
 import { ImagePlus, X } from 'lucide-react'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -46,6 +48,7 @@ export function TripForm({
   onSubmit(values: TripInput, photo: File | null | undefined): Promise<void>
 }) {
   const [photo, setPhoto] = useState<File | null | undefined>(undefined)
+  const [cropping, setCropping] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(initial?.coverPhotoURL ?? null)
   useEffect(() => {
     if (!photo) return
@@ -155,7 +158,7 @@ export function TripForm({
                 className="sr-only"
                 onChange={(e) => {
                   const f = e.target.files?.[0]
-                  if (f) setPhoto(f)
+                  if (f) setCropping(f)
                   e.target.value = ''
                 }}
               />
@@ -195,6 +198,15 @@ export function TripForm({
       <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
         {isSubmitting ? 'Saving…' : submitLabel}
       </Button>
+      <CropDialog
+        file={cropping}
+        aspect={ASPECT.cover}
+        onCancel={() => setCropping(null)}
+        onDone={(f) => {
+          setCropping(null)
+          setPhoto(f)
+        }}
+      />
     </form>
   )
 }

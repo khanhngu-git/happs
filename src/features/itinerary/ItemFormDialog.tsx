@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { CropDialog } from '@/components/CropDialog'
+import { ASPECT } from '@/lib/crop'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -82,6 +84,7 @@ export function ItemFormDialog({
   const costLocked = useCostLocked(trip.id, linkedExpense?.id)
   // Photo: a new File to upload, null to remove, undefined to keep what's there.
   const [photo, setPhoto] = useState<File | null | undefined>(undefined)
+  const [cropping, setCropping] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(item?.photoURL ?? pre?.photoURL ?? null)
   useEffect(() => {
     if (!photo) return
@@ -264,7 +267,7 @@ export function ItemFormDialog({
                   aria-label="Add a photo"
                   onChange={(e) => {
                     const f = e.target.files?.[0]
-                    if (f) setPhoto(f)
+                    if (f) setCropping(f)
                     e.target.value = ''
                   }}
                 />
@@ -411,6 +414,15 @@ export function ItemFormDialog({
             {isSubmitting ? 'Saving…' : item ? 'Save' : 'Add'}
           </Button>
         </form>
+        <CropDialog
+          file={cropping}
+          aspect={ASPECT.item}
+          onCancel={() => setCropping(null)}
+          onDone={(f) => {
+            setCropping(null)
+            setPhoto(f)
+          }}
+        />
       </DialogContent>
     </Dialog>
   )
