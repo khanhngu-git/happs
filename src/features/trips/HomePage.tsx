@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { ChevronRight, FileUp, Luggage, Ticket } from 'lucide-react'
+import { ChevronRight, Luggage, Ticket } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
@@ -75,9 +75,6 @@ export function HomePage() {
                   <Button variant="secondary" onClick={() => setJoining(true)}>
                     Join a trip
                   </Button>
-                  <Button variant="ghost" onClick={() => navigate('/import')}>
-                    Import an itinerary
-                  </Button>
                 </div>
               }
             />
@@ -103,17 +100,6 @@ export function HomePage() {
             >
               <Ticket className="size-5 text-primary" aria-hidden />
               <span className="flex-1 text-[1.0625rem]">Join a trip with an invite</span>
-              <ChevronRight className="size-4 text-muted-foreground/70" aria-hidden />
-            </button>
-          )}
-          {trips.length > 0 && (
-            <button
-              type="button"
-              onClick={() => navigate('/import')}
-              className="-mt-4 flex min-h-14 w-full items-center gap-3 rounded-2xl bg-card px-4 text-left ring-1 ring-border/70 active:bg-foreground/[0.06]"
-            >
-              <FileUp className="size-5 text-primary" aria-hidden />
-              <span className="flex-1 text-[1.0625rem]">Import an itinerary</span>
               <ChevronRight className="size-4 text-muted-foreground/70" aria-hidden />
             </button>
           )}
