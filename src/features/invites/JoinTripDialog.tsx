@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { ClipboardPaste } from 'lucide-react'
+import { ClipboardPaste, ScanQrCode } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { parseInviteCode } from './parseInvite'
+import { QrScanner } from './QrScanner'
+import { canScanQr } from './qrSupport'
 
 /** Paste an invite link or code, then continue to the usual join preview. */
 export function JoinTripDialog({ open, onOpenChange }: { open: boolean; onOpenChange(o: boolean): void }) {
@@ -13,6 +15,8 @@ export function JoinTripDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const [value, setValue] = useState('')
   const [error, setError] = useState<string | null>(null)
   const canPaste = typeof navigator !== 'undefined' && !!navigator.clipboard?.readText
+  const [scanning, setScanning] = useState(false)
+  const canScan = canScanQr()
 
   function go(input: string) {
     const code = parseInviteCode(input)
@@ -35,8 +39,13 @@ export function JoinTripDialog({ open, onOpenChange }: { open: boolean; onOpenCh
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Join a trip</DialogTitle>
-          <DialogDescription className="text-foreground/80">Paste the invite link a friend sent you. Got a QR code? Scan it with your camera.</DialogDescription>
+          <DialogDescription className="text-foreground/80">{canScan ? 'Scan the invite QR code, or paste the link a friend sent you.' : 'Paste the invite link a friend sent you. Got a QR code? Scan it with your camera.'}</DialogDescription>
         </DialogHeader>
+        {canScan && (
+          <Button type="button" variant="secondary" size="lg" className="w-full" onClick={() => setScanning(true)}>
+            <ScanQrCode /> Scan QR code
+          </Button>
+        )}
         <form
           className="space-y-4"
           onSubmit={(e) => {
@@ -94,6 +103,18 @@ export function JoinTripDialog({ open, onOpenChange }: { open: boolean; onOpenCh
           </Button>
         </form>
       </DialogContent>
+      <QrScanner
+        open={scanning}
+        onOpenChange={setScanning}
+        onResult={(text) => {
+          setScanning(false)
+          if (parseInviteCode(text)) go(text)
+          else {
+            setValue(text.slice(0, 200))
+            setError('That QR code isn’t a happs invite.')
+          }
+        }}
+      />
     </Dialog>
   )
 }
