@@ -7,7 +7,7 @@ import { FullScreenLoader } from '@/components/FullScreenLoader'
 import { ItemTypeIcon } from '@/features/itinerary/ItemTypeIcon'
 import { buildIcs, downloadIcs } from '@/features/itinerary/calendar'
 import { amapUrl, googleDirectionsUrl, isMainlandChina } from '@/features/itinerary/routes'
-import { api, callableMessage } from '@/lib/functions'
+import { loadSharedTrip } from './shareApi'
 import { formatDateRange, formatLongDate, formatTime, tripDays } from '@/shared/dates'
 import { itemsForDay, staysForDay } from '@/shared/itinerary'
 import type { SharedTrip } from '@/shared/schemas'
@@ -22,9 +22,9 @@ export function SharedTripPage() {
 
   useEffect(() => {
     let live = true
-    api.getSharedTrip({ token }).then(
+    loadSharedTrip(token).then(
       (t) => live && setTrip(t),
-      (err) => live && setError(callableMessage(err)),
+      (err: Error) => live && setError(err.message),
     )
     return () => {
       live = false

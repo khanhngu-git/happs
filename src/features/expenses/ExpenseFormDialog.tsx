@@ -12,7 +12,6 @@ import { CostFields, useCostLocked } from './CostFields'
 import { draftFromCost, emptyDraft, validateDraft, type CostDraft } from './costDraft'
 import { createExpense, SharesLockedError, updateExpense } from './expenseApi'
 import { EXPENSE_CATEGORIES } from './categories'
-import { requestPushAfterAction } from '@/features/notifications/push'
 
 /** Add or edit an expense that isn't (necessarily) on the itinerary: groceries, a taxi… */
 export function ExpenseFormDialog({ open, onOpenChange, expense, items }: { open: boolean; onOpenChange(o: boolean): void; expense: Expense | null; items: Item[] }) {
@@ -41,11 +40,8 @@ export function ExpenseFormDialog({ open, onOpenChange, expense, items }: { open
     setBusy(true)
     try {
       const input = { ...r.cost, title: title.trim(), date, category, linkedItemId: linkedItemId || null }
-      if (expense) await updateExpense(trip, expense, input)
-      else {
-        await createExpense(trip, me, input)
-        void requestPushAfterAction()
-      }
+      if (expense) await updateExpense(trip, expense, input, me)
+      else await createExpense(trip, me, input)
       toast.success(expense ? 'Expense updated' : 'Expense added')
       onOpenChange(false)
     } catch (err) {

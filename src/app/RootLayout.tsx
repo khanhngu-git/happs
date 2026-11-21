@@ -1,12 +1,9 @@
 import { useEffect } from 'react'
 import { Outlet, ScrollRestoration, useNavigate } from 'react-router'
 import { toast } from 'sonner'
-import { useAuth } from '@/features/auth/AuthProvider'
-import { listenForeground } from '@/features/notifications/push'
 
 export function RootLayout() {
   const navigate = useNavigate()
-  const { user } = useAuth()
 
   // Notification clicks from the service worker ask the open tab to navigate.
   useEffect(() => {
@@ -17,14 +14,6 @@ export function RootLayout() {
     navigator.serviceWorker.addEventListener('message', onMessage)
     return () => navigator.serviceWorker.removeEventListener('message', onMessage)
   }, [navigate])
-
-  // Foreground pushes become toasts.
-  useEffect(() => {
-    if (!user) return
-    let off = () => {}
-    listenForeground((url) => navigate(url)).then((fn) => (off = fn))
-    return () => off()
-  }, [user, navigate])
 
   // Show connectivity changes; Firestore keeps working from its offline cache.
   useEffect(() => {

@@ -3,18 +3,18 @@ import { signUp, testUser } from './helpers'
 
 const IMAGE = 'public/pwa-512x512.png'
 
-test('profile photo and trip cover upload to Storage', async ({ page }) => {
+test('profile photo and trip cover are saved in Firestore', async ({ page }) => {
   await signUp(page, testUser('Photo'))
 
-  // Profile photo: pick a file, it's resized, uploaded and shown.
+  // Profile photo: pick a file, it's resized and saved as a small JPEG.
   await page.goto('/profile')
   await page.getByLabel('Choose a profile photo').setInputFiles(IMAGE)
   await expect(page.getByText('Photo updated')).toBeVisible()
   const avatar = page.getByRole('button', { name: 'Change profile photo' }).locator('img')
-  await expect(avatar).toHaveAttribute('src', /users%2F.+%2Favatar-\d+\.jpg/)
+  await expect(avatar).toHaveAttribute('src', /^data:image\/jpeg;base64,/)
   await expect(page.getByRole('button', { name: 'Remove photo' })).toBeVisible()
 
-  // Trip cover: chosen while creating, uploaded once the trip exists.
+  // Trip cover: chosen while creating, saved with the trip.
   await page.goto('/trips/new')
   await page.getByLabel('Trip name').fill('Cover photo trip')
   await page.getByLabel('Starts').fill('2026-12-01')
@@ -25,7 +25,7 @@ test('profile photo and trip cover upload to Storage', async ({ page }) => {
   await expect(page).toHaveURL(/\/members/)
   await page.keyboard.press('Escape')
   await page.goto('/')
-  await expect(page.locator('a:has-text("Cover photo trip") img').first()).toHaveAttribute('src', /trips%2F.+%2Fcover-\d+\.jpg/)
+  await expect(page.locator('a:has-text("Cover photo trip") img').first()).toHaveAttribute('src', /^data:image\/jpeg;base64,/)
 })
 
 test('activity photo shows in the day view, and Today brings you back', async ({ page }) => {
@@ -48,13 +48,12 @@ test('activity photo shows in the day view, and Today brings you back', async ({
 
   // Add an activity with a photo; the row shows the photo thumbnail.
   await page.getByRole('button', { name: 'Add to the plan' }).click()
-  await page.getByRole('button', { name: /Add your own/ }).click()
   await page.getByPlaceholder('The Bund at night').fill('Sunset walk')
   await page.getByLabel('Add a photo').setInputFiles(IMAGE)
   await expect(page.getByRole('img', { name: 'Activity photo' })).toBeVisible()
   await page.getByRole('button', { name: 'Add', exact: true }).click()
   await expect(page.getByText('Sunset walk')).toBeVisible()
-  await expect(page.locator('li:has-text("Sunset walk") img')).toHaveAttribute('src', /items%2F.+\.jpg/)
+  await expect(page.locator('li:has-text("Sunset walk") img')).toHaveAttribute('src', /^data:image\/jpeg;base64,/)
 
   // Look at another day, then jump back with Today.
   await page.getByRole('tab', { name: /^Day 3,/ }).click()

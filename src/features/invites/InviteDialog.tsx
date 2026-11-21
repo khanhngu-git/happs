@@ -12,7 +12,7 @@ import { createInvite, inviteUrl, shareLink } from './inviteApi'
 
 export function InviteDialog({ open, onOpenChange }: { open: boolean; onOpenChange(o: boolean): void }) {
   const user = useUser()
-  const { trip } = useTrip()
+  const { trip, members } = useTrip()
   const [expires, setExpires] = useState('7')
   const [maxUses, setMaxUses] = useState('')
   const [code, setCode] = useState<string | null>(null)
@@ -23,7 +23,7 @@ export function InviteDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   async function create() {
     setBusy(true)
     try {
-      setCode(await createInvite(trip.id, user.uid, { expiresInDays: expires ? Number(expires) : null, maxUses: maxUses ? Number(maxUses) : null }))
+      setCode(await createInvite(trip, user.uid, members.find((m) => m.id === user.uid)?.displayName || user.displayName || 'Someone', { expiresInDays: expires ? Number(expires) : null, maxUses: maxUses ? Number(maxUses) : null }))
     } catch (err) {
       console.error(err)
       toast.error('Couldn’t create the invite link.')

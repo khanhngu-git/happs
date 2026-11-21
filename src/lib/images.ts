@@ -32,3 +32,31 @@ export async function prepareImage(file: File, opts: { maxSize: number; square?:
   if (!blob) throw new ImageError('Couldn’t process that photo.')
   return blob
 }
+
+/**
+ * Encode a photo as a JPEG data URL no longer than `maxChars`, shrinking the
+ * quality and then the size until it fits. Photos live inside Firestore
+ * documents (1 MiB each), so every image has a byte budget.
+ */
+export async function imageDataUrl(file: File | Blob, opts: { maxSize: number; maxChars: number; square?: boolean }): Promise<string> {
+  const f = file instanceof File ? file : new File([file], 'image', { type: file.type || 'image/jpeg' })
+  let size = opts.maxSize
+  for (let attempt = 0; attempt < 8; attempt++) {
+    for (const quality of [0.82, 0.7, 0.58]) {
+      const blob = await prepareImage(f, { maxSize: size, square: opts.square, quality })
+      const url = await blobToDataUrl(blob)
+      if (url.length <= opts.maxChars) return url
+    }
+    size = Math.round(size * 0.75)
+  }
+  throw new ImageError('Couldn’t make that photo small enough. Try another one.')
+}
+
+export function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(r.result as string)
+    r.onerror = () => reject(r.error ?? new Error('Couldn’t read the file.'))
+    r.readAsDataURL(blob)
+  })
+}

@@ -96,9 +96,17 @@ export const memberSchema = z.object({
 })
 export type MemberDoc = z.infer<typeof memberSchema>
 
+/** invites/{code}: readable by anyone signed in who has the code, so it carries a preview of the trip. */
 export const inviteSchema = z.object({
-  /** Same as the doc id; stored so joinTrip can find it with a collection-group query. */
+  /** Same as the doc id. */
   code: z.string(),
+  tripId: z.string(),
+  tripName: z.string(),
+  destination: z.string().default(''),
+  startDate: dateStr,
+  endDate: dateStr,
+  coverEmoji: z.string().nullable().default(null),
+  invitedBy: z.string().default('Someone'),
   createdBy: z.string(),
   createdAt: timestamp.optional(),
   expiresAt: timestamp.nullable().default(null),
@@ -125,7 +133,10 @@ const dateTime = z.object({ date: dateStr, time: timeStr.nullable() })
 /** A ticket, booking confirmation or other document attached to a plan. */
 export const attachmentSchema = z.object({
   name: z.string(),
-  url: z.string(),
+  /** The file's document in trips/{tripId}/files. */
+  fileId: z.string().optional(),
+  /** Older attachments that were uploaded to Cloud Storage. */
+  url: z.string().optional(),
   contentType: z.string(),
   size: z.number().int().nonnegative().default(0),
 })

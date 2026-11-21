@@ -2,11 +2,17 @@ rules_version = '2';
 
 // happs security rules. Every rule here is covered by tests/rules.
 //
+// There is no server: the app writes everything, and these rules are what
+// keeps the data honest (the app runs on Firebase's free Spark plan).
+//
 // Principles:
 // - Trip data is visible only to users in the trip's memberIds.
-// - memberIds is never client-editable (joinTrip / removeMember functions own it).
-// - Shares are created by Cloud Functions only. Clients may only move a
-//   share's status along the payment state machine (see src/shared/shareState.ts).
+// - memberIds changes only by joining with a valid invite, leaving, or the
+//   owner removing someone.
+// - Shares are written together with their expense and must match it. Once
+//   money has moved, a share only moves along the payment state machine
+//   (see src/shared/shareState.ts).
+// - Members of a trip can send each other in-app notifications.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -78,10 +84,96 @@ service cloud.firestore {
 
     // Client timestamps (used inside arrays, where serverTimestamp() is not
     // supported) must be within 5 minutes of the server clock.
+    // Photos are JPEG data URLs stored on the document, or a link (a Google
+    // profile photo, or one uploaded to Cloud Storage before photos moved here).
+    function isPhoto(v, max) {
+      return v == null || (v is string && v.size() <= max
+        && v.matches('^(data:image/jpeg;base64,|https?://).*'));
+    }
+
     function isRecent(t) {
       return t is timestamp
         && t > request.time - duration.value(5, 'm')
         && t < request.time + duration.value(5, 'm');
+    }
+
+    function memberPath(tripId, uid) {
+      return /databases/$(database)/documents/trips/$(tripId)/members/$(uid);
+    }
+
+    // Joining uses up one use of a live invite for this trip, in the same batch.
+    function inviteOk(code, tripId) {
+      let p = /databases/$(database)/documents/invites/$(code);
+      let inv = get(p).data;
+      return code is string
+        && inv.tripId == tripId
+        && inv.revoked == false
+        && (inv.expiresAt == null || inv.expiresAt > request.time)
+        && (inv.maxUses == null || inv.uses < inv.maxUses)
+        && getAfter(p).data.uses == inv.uses + 1;
+    }
+
+    /* ---------------- invites ----------------
+     * invites/{code}: anyone signed in who has the code can read it (it
+     * carries a small preview of the trip). Members create them; the owner
+     * or creator revokes them; joining increments `uses`.
+     */
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow list: if isMember(resource.data.tripId);
+
+      allow create: if isMember(request.resource.data.tripId)
+        && code.size() >= 10 && code.size() <= 64
+        && request.resource.data.keys().hasOnly(['code', 'tripId', 'tripName', 'destination', 'startDate', 'endDate', 'coverEmoji',
+                                                 'invitedBy', 'createdBy', 'createdAt', 'expiresAt', 'maxUses', 'uses', 'revoked'])
+        && request.resource.data.code == code
+        && request.resource.data.createdBy == me()
+        && request.resource.data.uses == 0
+        && request.resource.data.revoked == false
+        && isNonEmptyStr(request.resource.data.tripName, 100)
+        && isStr(request.resource.data.destination, 200)
+        && isDate(request.resource.data.startDate) && isDate(request.resource.data.endDate)
+        && (request.resource.data.coverEmoji == null || isStr(request.resource.data.coverEmoji, 16))
+        && isStr(request.resource.data.invitedBy, 100)
+        && (request.resource.data.maxUses == null || (request.resource.data.maxUses is int && request.resource.data.maxUses > 0))
+        && (request.resource.data.expiresAt == null || request.resource.data.expiresAt is timestamp);
+
+      allow update: if signedIn() && (
+        (isMember(resource.data.tripId)
+          && (isOwner(resource.data.tripId) || resource.data.createdBy == me())
+          && onlyChanges(['revoked'])
+          && request.resource.data.revoked == true)
+        // Joining: I'm not on the trip yet, and I am after this batch.
+        || (onlyChanges(['uses'])
+          && request.resource.data.uses == resource.data.uses + 1
+          && !(me() in trip(resource.data.tripId).memberIds)
+          && me() in getAfter(tripPath(resource.data.tripId)).data.memberIds)
+      );
+
+      // When a trip is deleted.
+      allow delete: if isOwner(resource.data.tripId);
+    }
+
+    /* ---------------- read-only trip links ----------------
+     * publicTrips/{token}: a copy of a trip's plan (no costs, notes, bookings
+     * or member names) that anyone with the token can read, signed in or not.
+     * Members keep it up to date while the trip's shareToken matches.
+     */
+    match /publicTrips/{token} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if isMember(request.resource.data.tripId)
+        && getAfter(tripPath(request.resource.data.tripId)).data.get('shareToken', null) == token
+        && request.resource.data.keys().hasOnly(['tripId', 'name', 'destination', 'startDate', 'endDate', 'timeZone',
+                                                 'coverEmoji', 'coverPhotoURL', 'items', 'updatedAt'])
+        && isNonEmptyStr(request.resource.data.name, 100)
+        && isDate(request.resource.data.startDate) && isDate(request.resource.data.endDate)
+        && isPhoto(request.resource.data.get('coverPhotoURL', null), 240000)
+        && request.resource.data.items is list && request.resource.data.items.size() <= 400
+        && (resource == null || resource.data.tripId == request.resource.data.tripId);
+      // The owner turns the link off, changes it, or deletes the trip. (A
+      // link made before public copies existed has none to delete.)
+      allow delete: if signedIn() && (resource == null || isOwner(resource.data.tripId));
     }
 
     /* ---------------- users ---------------- */
@@ -100,28 +192,37 @@ service cloud.firestore {
         return d.keys().hasOnly(['displayName', 'email', 'photoURL', 'defaultCurrency', 'createdAt', 'notificationPrefs', 'payTo'])
           && validPayTo(d.get('payTo', null))
           && isStr(d.displayName, 100)
+          && isPhoto(d.get('photoURL', null), 60000)
           && (!('defaultCurrency' in d) || isCurrency(d.defaultCurrency))
           && (!('notificationPrefs' in d) || d.notificationPrefs is map);
       }
 
       allow read: if signedIn() && me() == userId;
       allow create, update: if signedIn() && me() == userId && validUser(request.resource.data);
-      // Account deletion goes through the deleteAccount function.
-      allow delete: if false;
+      allow delete: if signedIn() && me() == userId;
 
-      match /fcmTokens/{token} {
-        allow read, write: if signedIn() && me() == userId;
-      }
-
-      // Notifications are written by Cloud Functions only. Owners can read
-      // them, flip `read`, and clear them.
+      // Another member of a shared trip writes a notification; the owner
+      // reads them, flips `read`, and clears them.
       match /notifications/{notificationId} {
         allow read: if signedIn() && me() == userId;
         allow update: if signedIn() && me() == userId
           && onlyChanges(['read'])
           && request.resource.data.read is bool;
         allow delete: if signedIn() && me() == userId;
-        allow create: if false;
+        allow create: if signedIn()
+          && userId != me()
+          && request.resource.data.keys().hasOnly(['type', 'tripId', 'refPath', 'title', 'body', 'url', 'read', 'fromUid', 'createdAt', 'expireAt'])
+          && request.resource.data.fromUid == me()
+          && request.resource.data.type in ['memberJoined', 'itemChanged', 'shareSent', 'shareConfirmed', 'shareDisputed', 'expenseAdded', 'tripDeleted']
+          && request.resource.data.tripId is string
+          && isMember(request.resource.data.tripId)
+          && userId in trip(request.resource.data.tripId).memberIds
+          && isNonEmptyStr(request.resource.data.title, 200)
+          && isStr(request.resource.data.body, 500)
+          && isStr(request.resource.data.url, 500)
+          && (request.resource.data.refPath == null || isStr(request.resource.data.refPath, 500))
+          && request.resource.data.read == false
+          && request.resource.data.expireAt is timestamp;
       }
     }
 
@@ -137,7 +238,7 @@ service cloud.firestore {
           // Read-only link token: long and random, or off.
           && (d.get('shareToken', null) == null || (d.shareToken is string && d.shareToken.matches('^[A-Za-z0-9]{24,64}$')))
           && optStr(d, 'destination', 200)
-          && (d.get('coverPhotoURL', null) == null || isStr(d.coverPhotoURL, 2000))
+          && isPhoto(d.get('coverPhotoURL', null), 240000)
           && isDate(d.startDate) && isDate(d.endDate) && d.startDate <= d.endDate
           && isNonEmptyStr(d.timeZone, 64)
           && isCurrency(d.baseCurrency)
@@ -151,13 +252,30 @@ service cloud.firestore {
         && request.resource.data.memberIds == [me()]
         && validTrip(request.resource.data);
 
-      // Only the owner edits trip details. memberIds is never client editable.
-      // The owner may hand ownership to an existing member.
-      allow update: if signedIn()
-        && resource.data.ownerId == me()
-        && validTrip(request.resource.data)
-        && request.resource.data.memberIds == resource.data.memberIds
-        && request.resource.data.ownerId in resource.data.memberIds;
+      allow update: if signedIn() && validTrip(request.resource.data) && (
+        // The owner edits trip details, and may hand ownership to an existing member.
+        (resource.data.ownerId == me()
+          && request.resource.data.memberIds == resource.data.memberIds
+          && request.resource.data.ownerId in resource.data.memberIds)
+        // Joining with an invite (see members and invites below).
+        || (!(me() in resource.data.memberIds)
+          && onlyChanges(['memberIds', 'updatedAt'])
+          && request.resource.data.memberIds == resource.data.memberIds.concat([me()])
+          && resource.data.memberIds.size() < 50
+          && existsAfter(memberPath(tripId, me()))
+          && inviteOk(getAfter(memberPath(tripId, me())).data.get('inviteCode', null), tripId))
+        // Leaving (the owner hands over ownership first).
+        || (me() in resource.data.memberIds
+          && me() != resource.data.ownerId
+          && onlyChanges(['memberIds', 'updatedAt'])
+          && request.resource.data.memberIds == resource.data.memberIds.removeAll([me()]))
+        // The owner removes someone else.
+        || (resource.data.ownerId == me()
+          && onlyChanges(['memberIds', 'updatedAt'])
+          && request.resource.data.memberIds.size() == resource.data.memberIds.size() - 1
+          && resource.data.memberIds.hasAll(request.resource.data.memberIds)
+          && me() in request.resource.data.memberIds)
+      );
 
       allow delete: if signedIn() && resource.data.ownerId == me();
 
@@ -172,41 +290,35 @@ service cloud.firestore {
           && getAfter(tripPath(tripId)).data.ownerId == me()
           && request.resource.data.keys().hasOnly(['role', 'displayName', 'photoURL', 'joinedAt', 'payTo'])
           && validPayTo(request.resource.data.get('payTo', null))
+          && isPhoto(request.resource.data.get('photoURL', null), 60000)
           && request.resource.data.role == 'owner';
+
+        // Joining with an invite: my own doc, in the same batch as joining the trip.
+        allow create: if signedIn()
+          && memberId == me()
+          && !(me() in trip(tripId).memberIds)
+          && me() in getAfter(tripPath(tripId)).data.memberIds
+          && request.resource.data.keys().hasOnly(['role', 'displayName', 'photoURL', 'joinedAt', 'payTo', 'inviteCode'])
+          && request.resource.data.role == 'member'
+          && isStr(request.resource.data.displayName, 100)
+          && isPhoto(request.resource.data.get('photoURL', null), 60000)
+          && validPayTo(request.resource.data.get('payTo', null))
+          && inviteOk(request.resource.data.inviteCode, tripId);
 
         // Members update their own name/photo; the owner changes roles.
         allow update: if signedIn() && (
           (memberId == me() && isMember(tripId) && onlyChanges(['displayName', 'photoURL', 'payTo'])
             && isStr(request.resource.data.displayName, 100)
+            && isPhoto(request.resource.data.get('photoURL', null), 60000)
             && validPayTo(request.resource.data.get('payTo', null)))
           || (isOwner(tripId) && onlyChanges(['role']) && request.resource.data.role in ['owner', 'member'])
         );
 
-        // Removal goes through the removeMember function.
-        allow delete: if false;
-      }
-
-      /* ---- invites ---- */
-      match /invites/{code} {
-        allow read: if isMember(tripId);
-
-        allow create: if isMember(tripId)
-          && code.size() >= 10 && code.size() <= 64
-          && request.resource.data.keys().hasOnly(['code', 'createdBy', 'createdAt', 'expiresAt', 'maxUses', 'uses', 'revoked'])
-          && request.resource.data.code == code
-          && request.resource.data.createdBy == me()
-          && request.resource.data.uses == 0
-          && request.resource.data.revoked == false
-          && (request.resource.data.maxUses == null || (request.resource.data.maxUses is int && request.resource.data.maxUses > 0))
-          && (request.resource.data.expiresAt == null || request.resource.data.expiresAt is timestamp);
-
-        // Owner (or the invite's creator) can revoke. `uses` is server only.
-        allow update: if isMember(tripId)
-          && (isOwner(tripId) || resource.data.createdBy == me())
-          && onlyChanges(['revoked'])
-          && request.resource.data.revoked == true;
-
-        allow delete: if false;
+        // Leaving or being removed (together with leaving memberIds), or the owner deleting the trip.
+        allow delete: if signedIn() && (
+          isOwner(tripId)
+          || (memberId == me() && !(me() in getAfter(tripPath(tripId)).data.memberIds))
+        );
       }
 
       /* ---- ideas (not yet scheduled; members vote) ---- */
@@ -235,6 +347,22 @@ service cloud.firestore {
           || (resource.data.createdBy == me() && onlyChanges(['title', 'type', 'location', 'note']))
         );
         allow delete: if isMember(tripId) && (resource.data.createdBy == me() || isOwner(tripId));
+      }
+
+      /* ---- files: tickets and PDFs attached to plans (base64, one per document) ---- */
+      match /files/{fileId} {
+        allow read: if isMember(tripId);
+        allow create: if isMember(tripId)
+          && request.resource.data.keys().hasOnly(['itemId', 'name', 'contentType', 'size', 'data', 'createdBy', 'createdAt'])
+          && request.resource.data.createdBy == me()
+          && request.resource.data.itemId is string
+          && isNonEmptyStr(request.resource.data.name, 200)
+          && request.resource.data.contentType in ['application/pdf', 'image/jpeg']
+          && request.resource.data.size is int
+          && request.resource.data.data is string
+          && request.resource.data.data.size() <= 900000;
+        allow update: if false;
+        allow delete: if isMember(tripId);
       }
 
       /* ---- itinerary items ---- */
@@ -272,7 +400,7 @@ service cloud.firestore {
             && optStr(d, 'bookingRef', 200)
             && (!('order' in d) || d.order is number)
             && (d.get('linkedExpenseId', null) == null || d.linkedExpenseId is string)
-            && (d.get('photoURL', null) == null || isStr(d.photoURL, 2000));
+            && isPhoto(d.get('photoURL', null), 160000);
         }
 
         allow read: if isMember(tripId);
@@ -334,7 +462,41 @@ service cloud.firestore {
             return request.resource.data;
           }
 
-          // Identity and money fields are server-owned: never client editable.
+          function expensePath() {
+            return /databases/$(database)/documents/trips/$(tripId)/expenses/$(expenseId);
+          }
+
+          // A share as written with its expense: matches the expense (as it
+          // will be after this batch) and starts fresh with one history entry.
+          function freshShare(d) {
+            let e = getAfter(expensePath()).data;
+            return d.keys().hasOnly(['tripId', 'expenseId', 'expenseTitle', 'currency', 'debtorUid', 'payerUid', 'amountMinor',
+                                     'amountBaseMinor', 'status', 'method', 'reference', 'note', 'batchId', 'history', 'updatedAt'])
+              && d.tripId == tripId
+              && d.expenseId == expenseId
+              && d.debtorUid == shareUid
+              && shareUid in e.participantIds
+              && d.payerUid == e.paidBy
+              && d.currency == e.currency
+              && d.expenseTitle == e.title
+              && d.amountMinor is int && d.amountMinor >= 0 && d.amountMinor <= e.amountMinor
+              && d.amountBaseMinor is int && d.amountBaseMinor >= 0
+              && d.status == (shareUid == e.paidBy ? 'confirmed' : 'unpaid')
+              && d.method == null && d.reference == '' && d.note == '' && d.batchId == null
+              && d.history is list && d.history.size() == 1
+              && d.history[0].keys().hasOnly(['status', 'byUid', 'at', 'note'])
+              && d.history[0].byUid == me()
+              && d.history[0].status == d.status
+              && isRecent(d.history[0].at)
+              && isStr(d.history[0].note, 100);
+          }
+
+          // Nobody has paid yet (or it's the payer's own share), so it may be regenerated.
+          function unlocked() {
+            return resource.data.debtorUid == resource.data.payerUid || resource.data.status == 'unpaid';
+          }
+
+          // Identity and money fields only change by regenerating with the expense.
           function immutableFieldsKept() {
             return unchanged(['debtorUid', 'payerUid', 'amountMinor', 'amountBaseMinor', 'tripId', 'expenseId',
                               'currency', 'expenseTitle']);
@@ -401,11 +563,18 @@ service cloud.firestore {
           }
 
           allow read: if isMember(tripId);
-          allow create, delete: if false;
-          allow update: if isMember(tripId)
-            && immutableFieldsKept()
-            && historyAppended()
-            && (debtorMarksSent() || payerConfirms() || payerDisputes() || payerMarksReceived());
+          allow create: if isMember(tripId) && freshShare(request.resource.data);
+          allow update: if isMember(tripId) && (
+            (immutableFieldsKept()
+              && historyAppended()
+              && (debtorMarksSent() || payerConfirms() || payerDisputes() || payerMarksReceived()))
+            // The expense was edited before anyone paid: shares are rewritten to match.
+            || (unlocked() && freshShare(request.resource.data))
+            // The expense was renamed: keep the copy of its title in step.
+            || (onlyChanges(['expenseTitle', 'updatedAt']) && request.resource.data.expenseTitle == getAfter(expensePath()).data.title)
+          );
+          // Removed when nobody has paid yet, or together with the expense itself.
+          allow delete: if isMember(tripId) && (unlocked() || !existsAfter(expensePath()));
         }
       }
 
@@ -426,7 +595,8 @@ service cloud.firestore {
           (resource.data.toUid == me() && resource.data.status == 'sent' && request.resource.data.status in ['confirmed', 'disputed'])
           || (resource.data.fromUid == me() && resource.data.status == 'disputed' && request.resource.data.status == 'sent')
         );
-        allow delete: if false;
+        // When the owner deletes the trip.
+        allow delete: if isOwner(tripId);
       }
     }
 
@@ -468,10 +638,5 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
 
-    /* ---------------- usage counters ---------------- */
-    // Daily allowances for paid calls (functions/src/quota.ts). Server only.
-    match /usage/{id} {
-      allow read, write: if false;
-    }
   }
 }

@@ -3,8 +3,8 @@ import { toast } from 'sonner'
 import { PageHeader } from '@/components/PageHeader'
 import { useAuth, useUser } from '@/features/auth/AuthProvider'
 import { TripForm } from './TripForm'
-import { createTrip, updateTrip } from './tripApi'
-import { uploadTripCover } from '@/lib/uploads'
+import { createTrip } from './tripApi'
+import { coverPhoto } from '@/lib/uploads'
 
 export function NewTripPage() {
   const user = useUser()
@@ -21,9 +21,8 @@ export function NewTripPage() {
             submitLabel="Create trip"
             onSubmit={async (input, photo) => {
               try {
-                const id = await createTrip(user, profile, input)
-                // The cover can only be uploaded once the trip exists (storage rules check ownership).
-                if (photo) await uploadTripCover(id, photo).then((url) => updateTrip(id, { coverPhotoURL: url })).catch(() => toast.error('Trip created, but the cover photo didn’t upload.'))
+                const coverPhotoURL = photo ? await coverPhoto(photo) : null
+                const id = await createTrip(user, profile, { ...input, coverPhotoURL })
                 toast.success('Trip created')
                 navigate(`/trips/${id}/members?invite=1`, { replace: true })
               } catch (err) {

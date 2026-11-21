@@ -1,7 +1,9 @@
 /**
- * Firebase initialisation. In dev (`VITE_USE_EMULATORS=true`) the app talks
- * to the local Emulator Suite under the `demo-happs` project id, so no real
- * project resources are touched.
+ * Firebase initialisation. The app uses only Auth and Firestore (plus
+ * Hosting), so it runs on Firebase's free Spark plan: no Cloud Functions and
+ * no Cloud Storage. In dev (`VITE_USE_EMULATORS=true`) it talks to the local
+ * Emulator Suite under the `demo-happs` project id, so no real project
+ * resources are touched.
  */
 import { initializeApp } from 'firebase/app'
 import { connectAuthEmulator, getAuth } from 'firebase/auth'
@@ -12,7 +14,6 @@ import {
   persistentLocalCache,
   persistentMultipleTabManager,
 } from 'firebase/firestore'
-import { connectFunctionsEmulator, getFunctions } from 'firebase/functions'
 
 const env = import.meta.env
 
@@ -25,7 +26,6 @@ export const USE_EMULATORS = env.DEV && env.VITE_USE_EMULATORS === 'true'
  */
 export const USE_AUTH_EMULATOR = USE_EMULATORS && env.VITE_AUTH_EMULATOR !== 'false'
 export const EMULATOR_PROJECT_ID = USE_AUTH_EMULATOR ? 'demo-happs' : (env.VITE_FIREBASE_PROJECT_ID as string)
-export const FUNCTIONS_REGION = env.VITE_FUNCTIONS_REGION || 'australia-southeast1'
 
 /**
  * Same-origin auth domain: on Firebase Hosting every domain serves
@@ -47,18 +47,15 @@ export const firebaseConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY || 'demo-api-key',
   authDomain: resolveAuthDomain(),
   projectId: USE_EMULATORS ? EMULATOR_PROJECT_ID : env.VITE_FIREBASE_PROJECT_ID,
-  // The emulator's default bucket follows the demo project id.
-  storageBucket: USE_EMULATORS ? `${EMULATOR_PROJECT_ID}.appspot.com` : env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: env.VITE_FIREBASE_APP_ID,
 }
 
 export const app = initializeApp(firebaseConfig)
 
 /**
- * App Check proves calls come from this app, so scripts can't call the paid
- * functions directly. Off until VITE_APPCHECK_SITE_KEY (reCAPTCHA Enterprise)
- * is set; enforce it server-side with ENFORCE_APP_CHECK=true afterwards.
+ * App Check proves requests come from this app, so scripts can't use the
+ * database directly. Off until VITE_APPCHECK_SITE_KEY (reCAPTCHA Enterprise)
+ * is set; then turn on enforcement for Firestore in the Firebase console.
  */
 if (env.VITE_APPCHECK_SITE_KEY && !USE_EMULATORS && typeof window !== 'undefined') {
   // Loaded only when configured, so it costs nothing otherwise.
@@ -80,19 +77,6 @@ export const db = initializeFirestore(app, {
   ignoreUndefinedProperties: true,
 })
 
-export const functions = getFunctions(app, FUNCTIONS_REGION)
-
-/** Storage is only needed for photo uploads, so it loads on first use. */
-let storagePromise: Promise<import('firebase/storage').FirebaseStorage> | null = null
-export function getAppStorage() {
-  storagePromise ??= import('firebase/storage').then(({ getStorage, connectStorageEmulator }) => {
-    const storage = getStorage(app)
-    if (USE_EMULATORS) connectStorageEmulator(storage, env.VITE_EMULATOR_HOST || '127.0.0.1', Number(env.VITE_EMU_STORAGE_PORT) || 9199)
-    return storage
-  })
-  return storagePromise
-}
-
 if (USE_EMULATORS) {
   const host = env.VITE_EMULATOR_HOST || '127.0.0.1'
   // Auth goes through `localhost` so its redirect iframe is same-site with the
@@ -104,5 +88,4 @@ if (USE_EMULATORS) {
   const port = (v: string | undefined, d: number) => Number(v) || d
   if (USE_AUTH_EMULATOR) connectAuthEmulator(auth, `http://${authHost}:${port(env.VITE_EMU_AUTH_PORT, 9099)}`, { disableWarnings: true })
   connectFirestoreEmulator(db, host, port(env.VITE_EMU_FIRESTORE_PORT, 8080))
-  connectFunctionsEmulator(functions, host, port(env.VITE_EMU_FUNCTIONS_PORT, 5001))
 }

@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useUser } from '@/features/auth/AuthProvider'
 import { db } from '@/lib/firebase'
 import { refs, useLiveQuery, type AppNotification } from '@/lib/firestore'
+import { useWantsNotification } from './useUnread'
 import { cn } from '@/lib/utils'
 import type { NotificationType } from '@/shared/schemas'
 import { formatInstantDate } from '@/shared/dates'
@@ -34,7 +35,9 @@ function relative(ms: number): string {
 export function NotificationsPage() {
   const user = useUser()
   const navigate = useNavigate()
-  const { data, loading } = useLiveQuery<AppNotification>(query(refs.notifications(user.uid), orderBy('createdAt', 'desc'), limit(60)), `notifs:${user.uid}`)
+  const wants = useWantsNotification()
+  const { data: all, loading } = useLiveQuery<AppNotification>(query(refs.notifications(user.uid), orderBy('createdAt', 'desc'), limit(60)), `notifs:${user.uid}`)
+  const data = all.filter(wants)
   const unread = data.filter((n) => !n.read)
 
   async function open(n: AppNotification) {

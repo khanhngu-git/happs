@@ -16,7 +16,6 @@ import { formatMoney } from '@/shared/money'
 import { formatShortDate } from '@/shared/dates'
 import { pairwiseDebts, type PairDebt } from '@/shared/balances'
 import { SHARE_STATUS_LABEL } from '@/shared/shareState'
-import { requestPushAfterAction } from '@/features/notifications/push'
 import { ExpenseFormDialog } from './ExpenseFormDialog'
 import { ExpenseSheet } from './ExpenseSheet'
 import { DisputeDialog, MarkPaidDialog } from './PaymentDialogs'
@@ -155,7 +154,6 @@ function PersonSheet({ pair, shares, expensesById, onOpenChange }: { pair: PairD
             await settleAll(trip.id, me, other, full, d)
             toast.success(`We’ll ask ${nameOf(other)} to confirm`)
             onOpenChange(false)
-            void requestPushAfterAction()
           } catch (err) {
             console.error(err)
             toast.error('Couldn’t settle up. Try again.')

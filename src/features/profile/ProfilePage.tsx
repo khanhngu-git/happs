@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { updateProfile } from 'firebase/auth'
 import { doc, updateDoc, writeBatch } from 'firebase/firestore'
 import { KeyRound, Loader2, LogOut, MessageSquare, Trash2 } from 'lucide-react'
@@ -13,26 +13,24 @@ import { NativeSelect } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { useAuth, useUser } from '@/features/auth/AuthProvider'
 import { addPasswordToAccount, authErrorMessage, linkGoogle, signOut } from '@/features/auth/authApi'
-import { useMyTrips } from '@/features/trips/tripApi'
-import { disablePush, enablePush, pushState, type PushState } from '@/features/notifications/push'
 import { db } from '@/lib/firebase'
-import { api, callableMessage } from '@/lib/functions'
+import { AccountDeletionError, deleteMyAccount, useMyTrips } from '@/features/trips/tripApi'
 import { COMMON_CURRENCIES } from '@/shared/money'
 import { DEFAULT_NOTIFICATION_PREFS, type NotificationType, type PayTo } from '@/shared/schemas'
 import { FeedbackDialog } from './FeedbackDialog'
 import { PhotoPicker } from '@/components/PhotoPicker'
-import { removeByUrl, uploadAvatar } from '@/lib/uploads'
+import { avatarPhoto } from '@/lib/uploads'
 import { FullScreenLoader } from '@/components/FullScreenLoader'
 
 /**
- * A few simple switches. Each one covers a group of notification types the
- * server sends (see NotificationType); a group is "on" if any of its types is.
+ * A few simple switches for what shows in Notifications. Each covers a group
+ * of notification types (see NotificationType); a group is "on" if any of its
+ * types is. Notifications are in-app only (there's no server to send pushes).
  */
 const PREF_GROUPS: { key: string; title: string; hint: string; types: NotificationType[] }[] = [
   { key: 'itinerary', title: 'Itinerary changes', hint: 'Plans added or edited', types: ['itemChanged'] },
   { key: 'expenses', title: 'New costs', hint: 'Someone adds a cost you share', types: ['expenseAdded'] },
-  { key: 'payments', title: 'Payments', hint: 'Paid, confirmed or not received', types: ['shareSent', 'shareConfirmed', 'shareDisputed', 'confirmReminder'] },
-  { key: 'tomorrow', title: 'Day-before summary', hint: 'Tomorrow’s first plans, the evening before', types: ['tripTomorrow'] },
+  { key: 'payments', title: 'Payments', hint: 'Paid, confirmed or not received', types: ['shareSent', 'shareConfirmed', 'shareDisputed'] },
   { key: 'members', title: 'Trip members', hint: 'Someone joins, or a trip is deleted', types: ['memberJoined', 'tripDeleted'] },
 ]
 
@@ -58,17 +56,12 @@ function ProfileForm() {
   const [name, setName] = useState(profile?.displayName ?? '')
   const [payTo, setPayTo] = useState<PayTo>({ payId: profile?.payTo?.payId ?? '', paypalMe: profile?.payTo?.paypalMe ?? '', bank: profile?.payTo?.bank ?? '' })
   const payToSaved = JSON.stringify({ payId: profile?.payTo?.payId ?? '', paypalMe: profile?.payTo?.paypalMe ?? '', bank: profile?.payTo?.bank ?? '' })
-  const [push, setPush] = useState<PushState>('off')
   const [password, setPassword] = useState('')
   const [feedback, setFeedback] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const providers = user.providerData.map((p) => p.providerId)
   const googlePhoto = user.providerData.find((p) => p.providerId === 'google.com')?.photoURL
   const prefs = { ...DEFAULT_NOTIFICATION_PREFS, ...(profile?.notificationPrefs ?? {}) }
-
-  useEffect(() => {
-    pushState().then(setPush, () => setPush('unsupported'))
-  }, [])
 
   /** Name and photo live on the profile and, denormalised, in each trip's member doc. */
   async function writeIdentity(patch: { displayName?: string; photoURL?: string | null; payTo?: PayTo | null }) {
@@ -96,14 +89,11 @@ function ProfileForm() {
   }
 
   async function setPhoto(file: File | null) {
-    const previous = profile?.photoURL
     if (file) {
-      const url = await uploadAvatar(user.uid, file, previous)
-      await writeIdentity({ photoURL: url })
+      await writeIdentity({ photoURL: await avatarPhoto(file) })
       toast.success('Photo updated')
     } else {
       await writeIdentity({ photoURL: null })
-      if (previous) await removeByUrl(previous)
     }
   }
 
@@ -202,33 +192,6 @@ function ProfileForm() {
         </Group>
 
         <Group title="Notifications">
-          <div className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
-            <div>
-              <p className="font-medium">Push notifications on this device</p>
-              <p className="text-sm text-muted-foreground">
-                {push === 'enabled' && 'On'}
-                {push === 'off' && 'Off'}
-                {push === 'denied' && 'Blocked in your browser settings'}
-                {push === 'unsupported' && 'Not supported here. On iPhone, add happs to your home screen first.'}
-                {push === 'unconfigured' && 'Not configured for this build'}
-              </p>
-            </div>
-            <Switch
-              checked={push === 'enabled'}
-              disabled={push !== 'enabled' && push !== 'off'}
-              aria-label="Push notifications"
-              onCheckedChange={async (on) => {
-                if (on) {
-                  const s = await enablePush()
-                  setPush(s)
-                  if (s !== 'enabled') toast.error(s === 'denied' ? 'Notifications are blocked in your browser settings.' : 'Couldn’t turn on notifications.')
-                } else {
-                  await disablePush()
-                  setPush('off')
-                }
-              }}
-            />
-          </div>
           {PREF_GROUPS.map((g) => (
             <label key={g.key} className="flex min-h-14 cursor-pointer items-center justify-between gap-3 px-4 py-2.5">
               <span>
@@ -298,11 +261,12 @@ function ProfileForm() {
         destructive
         onConfirm={async () => {
           try {
-            await api.deleteAccount({})
-            await signOut()
+            await deleteMyAccount(user, name || 'Someone')
+            await signOut().catch(() => undefined)
             toast.success('Your account was deleted')
           } catch (err) {
-            toast.error(callableMessage(err), { duration: 8000 })
+            console.error(err)
+            toast.error(err instanceof AccountDeletionError ? err.message : 'Couldn’t delete your account. Try again.', { duration: 8000 })
           }
         }}
       />

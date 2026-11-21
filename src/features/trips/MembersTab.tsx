@@ -8,12 +8,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { UserAvatar } from '@/components/UserAvatar'
 import { Fab } from '@/components/Fab'
-import { api, callableMessage } from '@/lib/functions'
 import type { Member } from '@/lib/firestore'
 import { InviteDialog } from '@/features/invites/InviteDialog'
 import { isInviteActive, revokeInvite, useInvites } from '@/features/invites/inviteApi'
 import { useTrip } from './TripContext'
-import { transferOwnership } from './tripApi'
+import { removeMember, transferOwnership } from './tripApi'
 import { formatInstantDate } from '@/shared/dates'
 import { useTripShares } from '@/features/expenses/expenseApi'
 
@@ -107,7 +106,7 @@ export function MembersTab() {
                 <Button
                   size="sm"
                   variant="destructive"
-                  onClick={() => revokeInvite(trip.id, i.id).then(() => toast.success('Link revoked'), () => toast.error('Couldn’t revoke'))}
+                  onClick={() => revokeInvite(i.id).then(() => toast.success('Link revoked'), () => toast.error('Couldn’t revoke'))}
                 >
                   Revoke
                 </Button>
@@ -140,10 +139,11 @@ export function MembersTab() {
         onConfirm={async () => {
           if (removingOpen > 0) return
           try {
-            await api.removeMember({ tripId: trip.id, uid: removing!.id })
+            await removeMember(trip.id, removing!.id)
             toast.success(`${removing!.displayName} was removed`)
           } catch (err) {
-            toast.error(callableMessage(err))
+            console.error(err)
+            toast.error('Couldn’t remove them. Check your connection and try again.')
           }
         }}
       />
@@ -179,11 +179,12 @@ export function MembersTab() {
             return
           }
           try {
-            await api.removeMember({ tripId: trip.id, uid: me })
+            await removeMember(trip.id, me)
             toast.success('You left the trip')
             navigate('/', { replace: true })
           } catch (err) {
-            toast.error(callableMessage(err))
+            console.error(err)
+            toast.error('Couldn’t leave the trip. Check your connection and try again.')
           }
         }}
       />

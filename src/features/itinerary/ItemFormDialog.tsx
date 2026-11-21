@@ -25,7 +25,7 @@ import { PlacePicker } from './PlacePicker'
 import { usePlaceBias } from './placeBias'
 import { isMainlandChina } from './routes'
 import { newItemId, saveItem } from './itineraryApi'
-import { removeByUrl, uploadItemAttachment, uploadItemPhoto } from '@/lib/uploads'
+import { deleteAttachment, itemPhoto, saveItemAttachment } from '@/lib/uploads'
 import { ImageError } from '@/lib/images'
 import { FileText, ImagePlus, Loader2, Paperclip, TriangleAlert, X } from 'lucide-react'
 
@@ -90,9 +90,9 @@ export function ItemFormDialog({
     return () => URL.revokeObjectURL(url)
   }, [photo])
   const [more, setMore] = useState(!!(item?.notes || item?.bookingUrl || item?.bookingRef || item?.attachments?.length || linkedExpense || pre))
-  // Tickets and confirmations. Removed files are deleted from storage only after a successful save.
+  // Tickets and confirmations. Removed files are deleted only after a successful save.
   const [attachments, setAttachments] = useState<Attachment[]>(item?.attachments ?? [])
-  const [removedFiles, setRemovedFiles] = useState<string[]>([])
+  const [removedFiles, setRemovedFiles] = useState<Attachment[]>([])
   const [uploading, setUploading] = useState(false)
   async function attach(files: FileList | null) {
     if (!files?.length) return
@@ -100,7 +100,7 @@ export function ItemFormDialog({
     try {
       const room = MAX_ATTACHMENTS - attachments.length
       const added: Attachment[] = []
-      for (const f of Array.from(files).slice(0, room)) added.push(await uploadItemAttachment(trip.id, itemId, f))
+      for (const f of Array.from(files).slice(0, room)) added.push(await saveItemAttachment(trip.id, itemId, me, f))
       setAttachments((a) => [...a, ...added])
       if (files.length > room) toast.warning(`Up to ${MAX_ATTACHMENTS} files per plan.`)
     } catch (err) {
@@ -159,13 +159,9 @@ export function ItemFormDialog({
     const stay = v.type === 'stay'
     try {
       const id = itemId
-      // A finder photo is a hotel image URL; it's kept as is unless replaced.
       let photoURL = item?.photoURL ?? pre?.photoURL ?? null
-      if (photo) photoURL = await uploadItemPhoto(trip.id, id, photo, item?.photoURL)
-      else if (photo === null) {
-        if (item?.photoURL) await removeByUrl(item.photoURL)
-        photoURL = null
-      }
+      if (photo) photoURL = await itemPhoto(photo)
+      else if (photo === null) photoURL = null
       await saveItem({
         trip,
         uid: me,
@@ -189,7 +185,7 @@ export function ItemFormDialog({
           attachments,
         },
       })
-      await Promise.all(removedFiles.map((u) => removeByUrl(u)))
+      await Promise.all(removedFiles.map((a) => deleteAttachment(trip.id, a)))
       toast.success(item ? 'Saved' : 'Added')
       onOpenChange(false)
     } catch (err) {
@@ -338,7 +334,7 @@ export function ItemFormDialog({
             {attachments.length > 0 && (
               <ul className="divide-y divide-border/70 overflow-hidden rounded-xl bg-card ring-1 ring-input">
                 {attachments.map((a) => (
-                  <li key={a.url} className="flex min-h-11 items-center gap-2 pl-3">
+                  <li key={a.fileId ?? a.url ?? a.name} className="flex min-h-11 items-center gap-2 pl-3">
                     <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />
                     <span className="min-w-0 flex-1 truncate text-[0.9375rem]">{a.name}</span>
                     <button
@@ -346,8 +342,8 @@ export function ItemFormDialog({
                       className="inline-flex size-11 items-center justify-center rounded-full"
                       aria-label={`Remove ${a.name}`}
                       onClick={() => {
-                        setAttachments((x) => x.filter((y) => y.url !== a.url))
-                        setRemovedFiles((r) => [...r, a.url])
+                        setAttachments((x) => x.filter((y) => y !== a))
+                        setRemovedFiles((r) => [...r, a])
                       }}
                     >
                       <X className="size-4" />

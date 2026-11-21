@@ -5,41 +5,40 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/EmptyState'
-import { api, callableMessage } from '@/lib/functions'
+import { useAuth, useUser } from '@/features/auth/AuthProvider'
+import { getInvitePreview, InviteError, joinTrip } from './inviteApi'
 import { cn } from '@/lib/utils'
 import { formatDateRange } from '@/shared/dates'
 import type { InvitePreview } from '@/shared/schemas'
-import { requestPushAfterAction } from '@/features/notifications/push'
 
 /** /join/:code — guarded, so signed-out visitors go to login and bounce back here. */
 export function JoinPage() {
   const { code = '' } = useParams()
   const navigate = useNavigate()
+  const user = useUser()
+  const { profile } = useAuth()
   const [preview, setPreview] = useState<InvitePreview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    api
-      .getInvitePreview({ code })
+    getInvitePreview(code, user.uid)
       .then((p) => !cancelled && setPreview(p))
-      .catch((err) => !cancelled && setError(callableMessage(err)))
+      .catch((err) => !cancelled && setError(err instanceof InviteError ? err.message : 'Couldn’t load this invite. Check your connection.'))
     return () => {
       cancelled = true
     }
-  }, [code])
+  }, [code, user.uid])
 
   async function join() {
     setJoining(true)
     try {
-      const { tripId } = await api.joinTrip({ code })
+      const { tripId } = await joinTrip(code, user, profile)
       toast.success(`You’re in! Welcome to ${preview?.tripName}`)
       navigate(`/trips/${tripId}/itinerary`, { replace: true })
-      // A natural moment to offer push notifications (never on first load).
-      void requestPushAfterAction()
     } catch (err) {
-      toast.error(callableMessage(err))
+      toast.error(err instanceof InviteError ? err.message : 'Couldn’t join. Check your connection and try again.')
       setJoining(false)
     }
   }

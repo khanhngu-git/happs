@@ -19,8 +19,6 @@ import { NowNextCard } from './NowNextCard'
 import { useItineraryDialogs } from './ItineraryDialogs'
 import { reorderItems, useItems } from './itineraryApi'
 import { useTripDay } from './useTripDay'
-import { AddMenu } from './AddMenu'
-import { HotelFinderSheet } from '@/features/hotelFinder/HotelFinderSheet'
 
 function SortableRow({ item, onOpen }: { item: Item; onOpen(): void }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
@@ -70,10 +68,8 @@ export function ItineraryTab() {
   const { trip } = useTrip()
   const { data: items, loading } = useItems(trip.id)
   const { days, day, index, today, setDay, step } = useTripDay(trip)
-  const { dialogs, openItem, addItem, addPrefilled } = useItineraryDialogs(items)
+  const { dialogs, openItem, addItem } = useItineraryDialogs(items)
   const [reordering, setReordering] = useState(false)
-  const [menu, setMenu] = useState(false)
-  const [finding, setFinding] = useState(false)
   const swipe = useSwipe(() => step(1), () => step(-1))
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -191,18 +187,7 @@ export function ItineraryTab() {
         )}
       </div>
 
-      <Fab label="Add to the plan" withTabBar onClick={() => setMenu(true)} />
-      <AddMenu open={menu} onOpenChange={setMenu} onPick={(k) => (k === 'own' ? addItem(day) : setFinding(true))} />
-      <HotelFinderSheet
-        key={finding ? 'open' : 'closed'}
-        open={finding}
-        onOpenChange={setFinding}
-        day={day}
-        onPick={(p) => {
-          setFinding(false)
-          addPrefilled(p)
-        }}
-      />
+      <Fab label="Add to the plan" withTabBar onClick={() => addItem(day)} />
       {dialogs}
     </main>
   )

@@ -47,7 +47,6 @@ test('two friends plan a trip and settle a cost', async ({ browser }) => {
   // 4. Alex adds a dinner with a cost split equally between both.
   await a.getByRole('link', { name: 'Itinerary' }).click()
   await a.getByRole('button', { name: 'Add to the plan' }).click()
-  await a.getByRole('button', { name: /Add your own/ }).click()
   await a.getByPlaceholder('The Bund at night').fill('Dinner at Lost Heaven')
   await a.getByLabel('Date').fill('2026-12-05')
   await a.getByLabel('Starts').fill('19:30')

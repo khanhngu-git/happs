@@ -7,6 +7,9 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useTrip } from '@/features/trips/TripContext'
 import { SharesLockedError } from '@/features/expenses/expenseApi'
 import type { Item } from '@/lib/firestore'
+import { preloadAttachments } from '@/lib/uploads'
+import { FileViewer } from './FileViewer'
+import type { Attachment } from '@/shared/schemas'
 import { formatLongDate } from '@/shared/dates'
 import { ItemTypeIcon } from './ItemTypeIcon'
 import { googleMapsUrl, timeLabel } from './format'
@@ -17,13 +20,13 @@ import { deleteItem } from './itineraryApi'
 export function ItemSheet({ item, onOpenChange, onEdit }: { item: Item | null; onOpenChange(o: boolean): void; onEdit(): void }) {
   const { trip, me, isOwner } = useTrip()
   const [confirm, setConfirm] = useState(false)
-  // Opening a plan saves its documents and photo on the device (the service worker keeps them), so they work offline.
-  const files = item ? [...(item.attachments ?? []).map((a) => a.url), ...(item.photoURL ? [item.photoURL] : [])] : []
-  const filesKey = files.join('|')
+  const [viewing, setViewing] = useState<Attachment | null>(null)
+  // Opening a plan loads its documents into Firestore's offline cache, so tickets open with no signal.
+  const filesKey = (item?.attachments ?? []).map((a) => a.fileId ?? '').join('|')
   useEffect(() => {
-    if (!filesKey || !('serviceWorker' in navigator) || !navigator.serviceWorker.controller) return
-    for (const url of filesKey.split('|')) void fetch(url, { mode: 'no-cors' }).catch(() => {})
-  }, [filesKey])
+    if (item && filesKey) preloadAttachments(trip.id, item.attachments ?? [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filesKey, trip.id])
   if (!item) return null
   const canDelete = item.createdBy === me || isOwner
   const when = item.type === 'stay' && item.checkOut ? `${formatLongDate(item.date)} → ${formatLongDate(item.checkOut.date)}` : formatLongDate(item.date)
@@ -79,12 +82,12 @@ export function ItemSheet({ item, onOpenChange, onEdit }: { item: Item | null; o
           {(item.attachments ?? []).length > 0 && (
             <ul className="divide-y divide-border/70 overflow-hidden rounded-2xl bg-foreground/[0.04] text-[0.9375rem]" aria-label="Tickets and documents">
               {(item.attachments ?? []).map((a) => (
-                <li key={a.url}>
-                  <a href={a.url} target="_blank" rel="noreferrer" className="flex min-h-12 items-center gap-3 px-4 py-2.5 active:bg-foreground/[0.06]">
+                <li key={a.fileId ?? a.url ?? a.name}>
+                  <button type="button" onClick={() => setViewing(a)} className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left active:bg-foreground/[0.06]">
                     <FileText className="size-5 shrink-0 text-muted-foreground" aria-hidden />
                     <span className="min-w-0 flex-1 truncate">{a.name}</span>
                     <ExternalLink className="size-4 shrink-0 text-primary" aria-hidden />
-                  </a>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -101,6 +104,7 @@ export function ItemSheet({ item, onOpenChange, onEdit }: { item: Item | null; o
           )}
         </DialogContent>
       </Dialog>
+      <FileViewer tripId={trip.id} file={viewing} onClose={() => setViewing(null)} />
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}
@@ -122,3 +126,4 @@ export function ItemSheet({ item, onOpenChange, onEdit }: { item: Item | null; o
     </>
   )
 }
+

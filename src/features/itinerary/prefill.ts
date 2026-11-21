@@ -2,7 +2,7 @@ import type { ItemCost } from '@/features/expenses/expenseApi'
 import type { ItemType } from '@/shared/itinerary'
 import type { Location } from '@/shared/schemas'
 
-/** Starting values for a new itinerary item, e.g. from the hotel finder. */
+/** Starting values for a new itinerary item, e.g. from an idea. */
 export interface ItemPrefill {
   type: ItemType
   title: string

@@ -1,12 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest'
 import { assertFails, assertSucceeds, type RulesTestEnvironment } from '@firebase/rules-unit-testing'
 import {
+  arrayRemove,
   arrayUnion,
   collection,
   deleteDoc,
   doc,
   getDoc,
   getDocs,
+  increment,
   query,
   serverTimestamp,
   setDoc,
@@ -48,29 +50,56 @@ describe('users', () => {
     await assertSucceeds(updateDoc(doc(db(env, MEMBER), 'trips', TRIP, 'members', MEMBER), { payTo }))
     await assertFails(updateDoc(doc(db(env, MEMBER), 'trips', TRIP, 'members', MEMBER2), { payTo }))
   })
-  it('usage counters and error reports are not readable by clients', async () => {
-    await assertFails(getDoc(doc(db(env, MEMBER), 'usage', `${MEMBER}_2026-12-05`)))
-    await assertFails(setDoc(doc(db(env, MEMBER), 'usage', `${MEMBER}_2026-12-05`), { booking: 0 }))
+  it('error reports are write-only', async () => {
     const report = { uid: MEMBER, message: 'Boom', stack: '', url: '/', appVersion: '0.1.0', userAgent: 'test' }
     await assertSucceeds(setDoc(doc(db(env, MEMBER), 'clientErrors', 'e1'), report))
     await assertFails(setDoc(doc(db(env, MEMBER), 'clientErrors', 'e2'), { ...report, uid: OWNER }))
     await assertFails(getDoc(doc(db(env, MEMBER), 'clientErrors', 'e1')))
   })
-  it('notifications: owner reads and flips read only; nobody creates', async () => {
-    await env.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), 'users', MEMBER, 'notifications', 'n1'), { type: 'shareSent', title: 'x', body: '', read: false })
+  it('notifications: a trip-mate sends one; the recipient reads, flips read and clears it', async () => {
+    const note = (from: string, over: Record<string, unknown> = {}) => ({
+      type: 'shareSent',
+      tripId: TRIP,
+      refPath: null,
+      title: 'Alice says she sent you A$10',
+      body: 'For Dinner',
+      url: `/trips/${TRIP}/expenses`,
+      read: false,
+      fromUid: from,
+      createdAt: serverTimestamp(),
+      expireAt: Timestamp.fromMillis(Date.now() + 90 * 86_400_000),
+      ...over,
     })
-    const n = doc(db(env, MEMBER), 'users', MEMBER, 'notifications', 'n1')
-    await assertSucceeds(getDoc(n))
-    await assertSucceeds(updateDoc(n, { read: true }))
-    await assertFails(updateDoc(n, { title: 'hacked' }))
+    const n = doc(db(env, OWNER), 'users', MEMBER, 'notifications', 'n1')
+    await assertSucceeds(setDoc(n, note(OWNER)))
+    const mine = doc(db(env, MEMBER), 'users', MEMBER, 'notifications', 'n1')
+    await assertSucceeds(getDoc(mine))
+    await assertSucceeds(updateDoc(mine, { read: true }))
+    await assertFails(updateDoc(mine, { title: 'hacked' }))
     await assertFails(getDoc(doc(db(env, OWNER), 'users', MEMBER, 'notifications', 'n1')))
-    await assertFails(setDoc(doc(db(env, OWNER), 'users', MEMBER, 'notifications', 'n2'), { type: 'shareSent', title: 'spam', read: false }))
-    await assertFails(setDoc(doc(db(env, MEMBER), 'users', MEMBER, 'notifications', 'n3'), { type: 'shareSent', title: 'self', read: false }))
+    await assertSucceeds(deleteDoc(mine))
+    // Not from outsiders, not to myself, not as someone else, not for a trip the recipient isn't on.
+    await assertFails(setDoc(doc(db(env, OUTSIDER), 'users', MEMBER, 'notifications', 'n2'), note(OUTSIDER)))
+    await assertFails(setDoc(doc(db(env, MEMBER), 'users', MEMBER, 'notifications', 'n3'), note(MEMBER)))
+    await assertFails(setDoc(doc(db(env, OWNER), 'users', MEMBER, 'notifications', 'n4'), note(MEMBER2)))
+    await assertFails(setDoc(doc(db(env, OWNER), 'users', OUTSIDER, 'notifications', 'n5'), note(OWNER)))
+    await assertFails(setDoc(doc(db(env, OWNER), 'users', MEMBER, 'notifications', 'n6'), note(OWNER, { read: true })))
+    await assertFails(setDoc(doc(db(env, OWNER), 'users', MEMBER, 'notifications', 'n7'), note(OWNER, { type: 'confirmReminder' })))
+    await assertFails(setDoc(doc(db(env, OWNER), 'users', MEMBER, 'notifications', 'n8'), note(OWNER, { extra: 1 })))
   })
-  it('fcm tokens are private to the user', async () => {
-    await assertSucceeds(setDoc(doc(db(env, MEMBER), 'users', MEMBER, 'fcmTokens', 'tok'), { createdAt: serverTimestamp() }))
-    await assertFails(getDoc(doc(db(env, OWNER), 'users', MEMBER, 'fcmTokens', 'tok')))
+  it('photos are small JPEG data URLs or https links', async () => {
+    const jpeg = (chars: number) => 'data:image/jpeg;base64,' + 'A'.repeat(chars)
+    await assertSucceeds(setDoc(doc(db(env, MEMBER), 'users', MEMBER), { displayName: 'Bob', photoURL: jpeg(40_000) }))
+    await assertSucceeds(setDoc(doc(db(env, MEMBER), 'users', MEMBER), { displayName: 'Bob', photoURL: 'https://lh3.googleusercontent.com/a/x' }))
+    await assertFails(setDoc(doc(db(env, MEMBER), 'users', MEMBER), { displayName: 'Bob', photoURL: jpeg(70_000) }))
+    await assertFails(setDoc(doc(db(env, MEMBER), 'users', MEMBER), { displayName: 'Bob', photoURL: 'javascript:alert(1)' }))
+    await assertSucceeds(updateDoc(doc(db(env, OWNER), 'trips', TRIP), { coverPhotoURL: jpeg(200_000) }))
+    await assertFails(updateDoc(doc(db(env, OWNER), 'trips', TRIP), { coverPhotoURL: jpeg(300_000) }))
+  })
+  it('a user can delete their own profile only', async () => {
+    await assertSucceeds(setDoc(doc(db(env, MEMBER), 'users', MEMBER), { displayName: 'Bob' }))
+    await assertFails(deleteDoc(doc(db(env, OWNER), 'users', MEMBER)))
+    await assertSucceeds(deleteDoc(doc(db(env, MEMBER), 'users', MEMBER)))
   })
 })
 
@@ -107,10 +136,30 @@ describe('trips', () => {
     await assertFails(updateDoc(doc(db(env, MEMBER), 'trips', TRIP), { startDate: '2026-12-01' }))
     await assertFails(updateDoc(doc(db(env, MEMBER), 'trips', TRIP), { ownerId: MEMBER }))
   })
-  it('nobody edits memberIds from the client, not even the owner', async () => {
+  it('memberIds: nobody adds people directly, not even the owner', async () => {
     await assertFails(updateDoc(doc(db(env, OWNER), 'trips', TRIP), { memberIds: arrayUnion(OUTSIDER) }))
     await assertFails(updateDoc(doc(db(env, OUTSIDER), 'trips', TRIP), { memberIds: arrayUnion(OUTSIDER) }))
     await assertFails(updateDoc(doc(db(env, OWNER), 'trips', TRIP), { memberIds: [OWNER] }))
+  })
+  it('a member leaves: off memberIds and their member doc, together', async () => {
+    const d = db(env, MEMBER)
+    const b = writeBatch(d)
+    b.update(doc(d, 'trips', TRIP), { memberIds: arrayRemove(MEMBER) })
+    b.delete(doc(d, 'trips', TRIP, 'members', MEMBER))
+    await assertSucceeds(b.commit())
+  })
+  it('leaving: only yourself, and the owner must hand over first', async () => {
+    await assertFails(updateDoc(doc(db(env, MEMBER), 'trips', TRIP), { memberIds: arrayRemove(MEMBER2) }))
+    await assertFails(updateDoc(doc(db(env, OWNER), 'trips', TRIP), { memberIds: arrayRemove(OWNER) }))
+    await assertFails(deleteDoc(doc(db(env, MEMBER), 'trips', TRIP, 'members', MEMBER)))
+  })
+  it('the owner removes one member at a time', async () => {
+    await assertFails(updateDoc(doc(db(env, OWNER), 'trips', TRIP), { memberIds: [OWNER] }))
+    const d = db(env, OWNER)
+    const b = writeBatch(d)
+    b.update(doc(d, 'trips', TRIP), { memberIds: arrayRemove(MEMBER2) })
+    b.delete(doc(d, 'trips', TRIP, 'members', MEMBER2))
+    await assertSucceeds(b.commit())
   })
   it('owner can hand ownership only to an existing member', async () => {
     await assertFails(updateDoc(doc(db(env, OWNER), 'trips', TRIP), { ownerId: OUTSIDER }))
@@ -127,18 +176,26 @@ describe('members', () => {
     await assertFails(setDoc(doc(db(env, OUTSIDER), 'trips', TRIP, 'members', OUTSIDER), { role: 'member', displayName: 'M', photoURL: null }))
     await assertFails(setDoc(doc(db(env, OWNER), 'trips', TRIP, 'members', OUTSIDER), { role: 'member', displayName: 'M', photoURL: null }))
   })
-  it('members update their own name; owner changes roles; no client deletes', async () => {
+  it('members update their own name; owner changes roles; members never delete others', async () => {
     await assertSucceeds(updateDoc(doc(db(env, MEMBER), 'trips', TRIP, 'members', MEMBER), { displayName: 'Bobby' }))
     await assertFails(updateDoc(doc(db(env, MEMBER), 'trips', TRIP, 'members', MEMBER), { role: 'owner' }))
     await assertFails(updateDoc(doc(db(env, MEMBER), 'trips', TRIP, 'members', MEMBER2), { displayName: 'x' }))
     await assertSucceeds(updateDoc(doc(db(env, OWNER), 'trips', TRIP, 'members', MEMBER), { role: 'owner' }))
-    await assertFails(deleteDoc(doc(db(env, OWNER), 'trips', TRIP, 'members', MEMBER)))
+    await assertFails(deleteDoc(doc(db(env, MEMBER2), 'trips', TRIP, 'members', OWNER)))
   })
 })
 
-describe('invites', () => {
+describe('invites and joining', () => {
+  const CODE = 'ABCDEFGHJK12'
   const invite = (uid: string, over: Record<string, unknown> = {}) => ({
-    code: 'ABCDEFGHJK12',
+    code: CODE,
+    tripId: TRIP,
+    tripName: 'Shanghai',
+    destination: 'Shanghai, China',
+    startDate: '2026-12-05',
+    endDate: '2026-12-12',
+    coverEmoji: null,
+    invitedBy: 'Bob',
     createdBy: uid,
     createdAt: serverTimestamp(),
     expiresAt: Timestamp.fromMillis(Date.now() + 7 * 86_400_000),
@@ -147,21 +204,109 @@ describe('invites', () => {
     revoked: false,
     ...over,
   })
-  it('any member can create an invite with a long code', async () => {
-    await assertSucceeds(setDoc(doc(db(env, MEMBER), 'trips', TRIP, 'invites', 'ABCDEFGHJK12'), invite(MEMBER)))
-    await assertFails(setDoc(doc(db(env, MEMBER), 'trips', TRIP, 'invites', 'short'), invite(MEMBER, { code: 'short' })))
-    await assertFails(setDoc(doc(db(env, OUTSIDER), 'trips', TRIP, 'invites', 'ABCDEFGHJK12'), invite(OUTSIDER)))
-    await assertFails(setDoc(doc(db(env, MEMBER), 'trips', TRIP, 'invites', 'ABCDEFGHJK12'), invite(MEMBER, { uses: 5 })))
-    await assertFails(setDoc(doc(db(env, MEMBER), 'trips', TRIP, 'invites', 'ABCDEFGHJK12'), invite(OWNER)))
-    await assertFails(setDoc(doc(db(env, MEMBER), 'trips', TRIP, 'invites', 'ABCDEFGHJK12'), invite(MEMBER, { code: 'OTHERCODE123' })))
-  })
-  it('owner or creator can revoke; nobody edits uses', async () => {
-    await env.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), 'trips', TRIP, 'invites', 'ABCDEFGHJK12'), invite(MEMBER))
+  const seedInvite = (over: Record<string, unknown> = {}) =>
+    env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'invites', CODE), { ...invite(MEMBER), createdAt: Timestamp.now(), ...over })
     })
-    await assertFails(updateDoc(doc(db(env, MEMBER2), 'trips', TRIP, 'invites', 'ABCDEFGHJK12'), { revoked: true }))
-    await assertFails(updateDoc(doc(db(env, MEMBER), 'trips', TRIP, 'invites', 'ABCDEFGHJK12'), { uses: 0, maxUses: 99 }))
-    await assertSucceeds(updateDoc(doc(db(env, OWNER), 'trips', TRIP, 'invites', 'ABCDEFGHJK12'), { revoked: true }))
-    await assertFails(updateDoc(doc(db(env, OWNER), 'trips', TRIP, 'invites', 'ABCDEFGHJK12'), { revoked: false }))
+  /** The three writes the app makes to join (src/features/invites/inviteApi.ts). */
+  const join = (uid: string, code = CODE, over: Record<string, unknown> = {}) => {
+    const d = db(env, uid)
+    const b = writeBatch(d)
+    b.update(doc(d, 'trips', TRIP), { memberIds: arrayUnion(uid), updatedAt: serverTimestamp() })
+    b.set(doc(d, 'trips', TRIP, 'members', uid), { role: 'member', displayName: 'Mallory', photoURL: null, joinedAt: serverTimestamp(), payTo: null, inviteCode: code, ...over })
+    b.update(doc(d, 'invites', code), { uses: increment(1) })
+    return b.commit()
+  }
+
+  it('any member can create an invite with a long code', async () => {
+    await assertSucceeds(setDoc(doc(db(env, MEMBER), 'invites', CODE), invite(MEMBER)))
+    await assertFails(setDoc(doc(db(env, MEMBER), 'invites', 'short'), invite(MEMBER, { code: 'short' })))
+    await assertFails(setDoc(doc(db(env, OUTSIDER), 'invites', 'XYZDEFGHJK12'), invite(OUTSIDER, { code: 'XYZDEFGHJK12' })))
+    await assertFails(setDoc(doc(db(env, MEMBER), 'invites', 'BBCDEFGHJK12'), invite(MEMBER, { code: 'BBCDEFGHJK12', uses: 5 })))
+    await assertFails(setDoc(doc(db(env, MEMBER), 'invites', 'CBCDEFGHJK12'), invite(OWNER, { code: 'CBCDEFGHJK12' })))
+    await assertFails(setDoc(doc(db(env, MEMBER), 'invites', 'DBCDEFGHJK12'), invite(MEMBER, { code: 'OTHERCODE123' })))
+  })
+  it('anyone signed in can read an invite by its code, but not list them', async () => {
+    await seedInvite()
+    await assertSucceeds(getDoc(doc(db(env, OUTSIDER), 'invites', CODE)))
+    await assertFails(getDoc(doc(db(env, null), 'invites', CODE)))
+    await assertFails(getDocs(collection(db(env, OUTSIDER), 'invites')))
+    await assertSucceeds(getDocs(query(collection(db(env, MEMBER), 'invites'), where('tripId', '==', TRIP))))
+  })
+  it('owner or creator can revoke; nobody resets uses', async () => {
+    await seedInvite()
+    await assertFails(updateDoc(doc(db(env, MEMBER2), 'invites', CODE), { revoked: true }))
+    await assertFails(updateDoc(doc(db(env, MEMBER), 'invites', CODE), { uses: 0, maxUses: 99 }))
+    await assertSucceeds(updateDoc(doc(db(env, OWNER), 'invites', CODE), { revoked: true }))
+    await assertFails(updateDoc(doc(db(env, OWNER), 'invites', CODE), { revoked: false }))
+  })
+  it('joins with a live invite: memberIds, member doc and uses in one batch', async () => {
+    await seedInvite({ maxUses: 2 })
+    await assertSucceeds(join(OUTSIDER))
+    await assertSucceeds(getDoc(doc(db(env, OUTSIDER), 'trips', TRIP)))
+  })
+  it('no joining with a revoked, expired, used-up or other trip’s invite', async () => {
+    for (const over of [{ revoked: true }, { expiresAt: Timestamp.fromMillis(Date.now() - 1000) }, { maxUses: 1, uses: 1 }, { tripId: 'other' }]) {
+      await seedInvite(over)
+      await assertFails(join(OUTSIDER))
+    }
+  })
+  it('no joining without using up the invite, or as an owner', async () => {
+    await seedInvite()
+    const d = db(env, OUTSIDER)
+    const b = writeBatch(d)
+    b.update(doc(d, 'trips', TRIP), { memberIds: arrayUnion(OUTSIDER) })
+    b.set(doc(d, 'trips', TRIP, 'members', OUTSIDER), { role: 'member', displayName: 'M', photoURL: null, inviteCode: CODE })
+    await assertFails(b.commit())
+    await assertFails(join(OUTSIDER, CODE, { role: 'owner' }))
+    await assertFails(join(OUTSIDER, 'NOSUCHCODE12'))
+  })
+})
+
+describe('files', () => {
+  const file = (uid: string, over: Record<string, unknown> = {}) => ({
+    itemId: 'i1', name: 'ticket.pdf', contentType: 'application/pdf', size: 3, data: 'JVBERi0=', createdBy: uid, createdAt: serverTimestamp(), ...over,
+  })
+  it('members attach files up to ~900 KB of base64; outsiders can’t read them', async () => {
+    await assertSucceeds(setDoc(doc(db(env, MEMBER), 'trips', TRIP, 'files', 'f1'), file(MEMBER)))
+    await assertSucceeds(getDoc(doc(db(env, MEMBER2), 'trips', TRIP, 'files', 'f1')))
+    await assertFails(getDoc(doc(db(env, OUTSIDER), 'trips', TRIP, 'files', 'f1')))
+    await assertFails(setDoc(doc(db(env, MEMBER), 'trips', TRIP, 'files', 'f2'), file(MEMBER, { data: 'A'.repeat(900_001) })))
+    await assertFails(setDoc(doc(db(env, MEMBER), 'trips', TRIP, 'files', 'f3'), file(MEMBER, { contentType: 'text/html' })))
+    await assertFails(setDoc(doc(db(env, OUTSIDER), 'trips', TRIP, 'files', 'f4'), file(OUTSIDER)))
+    await assertFails(updateDoc(doc(db(env, MEMBER), 'trips', TRIP, 'files', 'f1'), { name: 'x.pdf' }))
+    await assertSucceeds(deleteDoc(doc(db(env, MEMBER2), 'trips', TRIP, 'files', 'f1')))
+  })
+})
+
+describe('read-only links (publicTrips)', () => {
+  const TOKEN = 'abcdefghijklmnopqrstuvwxyz123456'
+  const copy = (over: Record<string, unknown> = {}) => ({
+    tripId: TRIP, name: 'Shanghai', destination: 'Shanghai, China', startDate: '2026-12-05', endDate: '2026-12-12',
+    timeZone: 'Asia/Shanghai', coverEmoji: null, coverPhotoURL: null, items: [], updatedAt: serverTimestamp(), ...over,
+  })
+  it('the owner turns a link on with its public copy; anyone can read it by token', async () => {
+    const d = db(env, OWNER)
+    const b = writeBatch(d)
+    b.update(doc(d, 'trips', TRIP), { shareToken: TOKEN })
+    b.set(doc(d, 'publicTrips', TOKEN), copy())
+    await assertSucceeds(b.commit())
+    await assertSucceeds(getDoc(doc(db(env, null), 'publicTrips', TOKEN)))
+    await assertFails(getDocs(collection(db(env, null), 'publicTrips')))
+    // Members keep it up to date; outsiders can't touch it.
+    await assertSucceeds(setDoc(doc(db(env, MEMBER), 'publicTrips', TOKEN), copy({ name: 'Shanghai!' })))
+    await assertFails(setDoc(doc(db(env, OUTSIDER), 'publicTrips', TOKEN), copy({ name: 'Hacked' })))
+    await assertFails(deleteDoc(doc(db(env, MEMBER), 'publicTrips', TOKEN)))
+    await assertSucceeds(deleteDoc(doc(db(env, OWNER), 'publicTrips', TOKEN)))
+    // Turning off a link that never had a public copy.
+    await assertSucceeds(deleteDoc(doc(db(env, OWNER), 'publicTrips', 'neverexisted1234567890abcdef')))
+  })
+  it('no public copy under a token the trip doesn’t use, or with private fields', async () => {
+    await assertFails(setDoc(doc(db(env, MEMBER), 'publicTrips', TOKEN), copy()))
+    const d = db(env, OWNER)
+    const b = writeBatch(d)
+    b.update(doc(d, 'trips', TRIP), { shareToken: TOKEN })
+    b.set(doc(d, 'publicTrips', TOKEN), copy({ memberIds: [OWNER] }))
+    await assertFails(b.commit())
   })
 })

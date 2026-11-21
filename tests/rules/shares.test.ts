@@ -163,11 +163,83 @@ describe('history is append-only', () => {
   })
 })
 
-describe('shares are server-created', () => {
-  it('nobody creates or deletes shares from the client', async () => {
-    await assertFails(setDoc(doc(db(env, OWNER), `trips/${TRIP}/expenses/e1/shares/${OUTSIDER}`), shareData({ debtorUid: OUTSIDER })))
+describe('shares are written with their expense', () => {
+  /** A fresh share as the app writes it (src/features/expenses/expenseApi.ts → stageShares). */
+  const fresh = (expenseId: string, debtor: string, by: string, over: Record<string, unknown> = {}) => {
+    const status = debtor === OWNER ? 'confirmed' : 'unpaid'
+    return shareData({ expenseId, debtorUid: debtor, status, history: [entry(status, by)], updatedAt: serverTimestamp(), ...over })
+  }
+  const addExpense = (by: string, shares: (d: Firestore, b: ReturnType<typeof writeBatch>) => void, over: Record<string, unknown> = {}) => {
+    const d = db(env, by)
+    const b = writeBatch(d)
+    b.set(doc(d, `trips/${TRIP}/expenses/e2`), expenseData({ createdBy: by, ...over }))
+    shares(d, b)
+    return b.commit()
+  }
+
+  it('a member adds a cost and everyone’s shares in one batch', async () => {
+    await assertSucceeds(
+      addExpense(MEMBER, (d, b) => {
+        for (const u of [OWNER, MEMBER, MEMBER2]) b.set(doc(d, `trips/${TRIP}/expenses/e2/shares/${u}`), fresh('e2', u, MEMBER))
+      }),
+    )
+  })
+  it('shares must match the expense: payer, participants, currency, title and a fresh state', async () => {
+    const bad: Record<string, unknown>[] = [
+      { payerUid: MEMBER },
+      { currency: 'USD' },
+      { expenseTitle: 'Something else' },
+      { status: 'confirmed', history: [entry('confirmed', MEMBER)] },
+      { method: 'cash' },
+      { amountMinor: 999_999 },
+      { history: [entry('unpaid', OWNER)] },
+    ]
+    for (const over of bad) {
+      await env.clearFirestore()
+      await seed(env)
+      await assertFails(addExpense(MEMBER, (d, b) => b.set(doc(d, `trips/${TRIP}/expenses/e2/shares/${MEMBER2}`), fresh('e2', MEMBER2, MEMBER, over))))
+    }
+    // Someone who isn't part of the split.
+    await assertFails(
+      addExpense(MEMBER, (d, b) => b.set(doc(d, `trips/${TRIP}/expenses/e2/shares/${MEMBER2}`), fresh('e2', MEMBER2, MEMBER)), { participantIds: [OWNER, MEMBER] }),
+    )
+    // Outsiders can't add shares at all.
+    await assertFails(setDoc(doc(db(env, OUTSIDER), `trips/${TRIP}/expenses/e1/shares/${OUTSIDER}`), fresh('e1', OUTSIDER, OUTSIDER)))
+  })
+  it('editing a cost before anyone has paid rewrites its shares', async () => {
+    const d = db(env, OWNER)
+    const b = writeBatch(d)
+    b.update(doc(d, `trips/${TRIP}/expenses/e1`), { amountMinor: 9000, amountBaseMinor: 9000 })
+    b.set(ref(d, MEMBER), fresh('e1', MEMBER, OWNER, { amountMinor: 3000, amountBaseMinor: 3000 }))
+    await assertSucceeds(b.commit())
+  })
+  it('once someone has paid, their share can’t be rewritten or deleted on its own', async () => {
+    await setStatus('sent', { history: [entry('unpaid', 'system'), entry('sent', MEMBER)] })
+    const d = db(env, OWNER)
+    const b = writeBatch(d)
+    b.update(doc(d, `trips/${TRIP}/expenses/e1`), { amountMinor: 9000, amountBaseMinor: 9000 })
+    b.set(ref(d, MEMBER), fresh('e1', MEMBER, OWNER, { amountMinor: 3000, amountBaseMinor: 3000 }))
+    await assertFails(b.commit())
     await assertFails(deleteDoc(ref(db(env, OWNER))))
-    await assertFails(deleteDoc(ref(db(env, MEMBER))))
+  })
+  it('unpaid shares can be removed; any share goes when its expense is deleted', async () => {
+    await assertSucceeds(deleteDoc(ref(db(env, MEMBER), MEMBER2)))
+    await setStatus('confirmed', { history: [entry('unpaid', 'system'), entry('confirmed', OWNER)] })
+    const d = db(env, OWNER)
+    const b = writeBatch(d)
+    b.delete(ref(d, MEMBER))
+    b.delete(ref(d, OWNER))
+    b.delete(doc(d, `trips/${TRIP}/expenses/e1`))
+    await assertSucceeds(b.commit())
+  })
+  it('renaming a cost updates the title copied on its shares, and nothing else', async () => {
+    await setStatus('confirmed', { history: [entry('unpaid', 'system'), entry('confirmed', OWNER)] })
+    const d = db(env, MEMBER)
+    const b = writeBatch(d)
+    b.update(doc(d, `trips/${TRIP}/expenses/e1`), { title: 'Dinner at Lost Heaven' })
+    b.update(ref(d), { expenseTitle: 'Dinner at Lost Heaven', updatedAt: serverTimestamp() })
+    await assertSucceeds(b.commit())
+    await assertFails(updateDoc(ref(db(env, MEMBER)), { expenseTitle: 'Not the expense title' }))
   })
 })
 

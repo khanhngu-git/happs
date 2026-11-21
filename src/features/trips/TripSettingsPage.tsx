@@ -1,20 +1,20 @@
 import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router'
-import { doc, limit, query, serverTimestamp, updateDoc } from 'firebase/firestore'
+import { limit, query } from 'firebase/firestore'
 import { Copy, Link2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { refs, useLiveQuery } from '@/lib/firestore'
-import { db } from '@/lib/firebase'
 import { TripForm } from './TripForm'
 import { useTrip } from './TripContext'
 import { deleteTrip, updateTrip } from './tripApi'
-import { removeByUrl, uploadTripCover } from '@/lib/uploads'
+import { coverPhoto } from '@/lib/uploads'
+import { refreshSharedTrip, setShareLink } from '@/features/share/shareApi'
 
 export function TripSettingsPage() {
-  const { trip, isOwner } = useTrip()
+  const { trip, isOwner, me, members } = useTrip()
   const navigate = useNavigate()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const hasExpenses = useLiveQuery(query(refs.expenses(trip.id), limit(1)), `anyExpense:${trip.id}`).data.length > 0
@@ -33,12 +33,10 @@ export function TripSettingsPage() {
             onSubmit={async (input, photo) => {
               try {
                 let coverPhotoURL = trip.coverPhotoURL
-                if (photo) coverPhotoURL = await uploadTripCover(trip.id, photo, trip.coverPhotoURL)
-                else if (photo === null && trip.coverPhotoURL) {
-                  await removeByUrl(trip.coverPhotoURL)
-                  coverPhotoURL = null
-                }
+                if (photo) coverPhotoURL = await coverPhoto(photo)
+                else if (photo === null) coverPhotoURL = null
                 await updateTrip(trip.id, { ...input, coverPhotoURL })
+                void refreshSharedTrip(trip.id)
                 toast.success('Trip updated')
                 navigate(`/trips/${trip.id}/itinerary`)
               } catch {
@@ -62,21 +60,18 @@ export function TripSettingsPage() {
         confirmLabel="Delete for everyone"
         destructive
         onConfirm={async () => {
-          await deleteTrip(trip.id)
-          toast.success('Trip deleted')
-          navigate('/', { replace: true })
+          try {
+            await deleteTrip(trip, me, members.find((m) => m.id === me)?.displayName || 'The trip owner')
+            toast.success('Trip deleted')
+            navigate('/', { replace: true })
+          } catch (err) {
+            console.error(err)
+            toast.error('Couldn’t delete the whole trip. Check your connection and try again.')
+          }
         }}
       />
     </div>
   )
-}
-
-/** 32 random letters and digits (about 190 bits): unguessable. */
-function newShareToken(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
-  const bytes = new Uint8Array(32)
-  crypto.getRandomValues(bytes)
-  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('')
 }
 
 /** Read-only link for people who aren't on the trip: the plan only, no costs or notes. */
@@ -84,11 +79,11 @@ function ShareLinkSection() {
   const { trip } = useTrip()
   const [busy, setBusy] = useState(false)
   const url = trip.shareToken ? `${location.origin}/share/${trip.shareToken}` : null
-  const set = async (shareToken: string | null) => {
+  const set = async (on: boolean) => {
     setBusy(true)
     try {
-      await updateDoc(doc(db, 'trips', trip.id), { shareToken, updatedAt: serverTimestamp() })
-      toast.success(shareToken ? 'Read-only link is on' : 'Read-only link turned off')
+      await setShareLink(trip, on)
+      toast.success(on ? 'Read-only link is on' : 'Read-only link turned off')
     } catch {
       toast.error('Couldn’t change the link')
     } finally {
@@ -109,13 +104,13 @@ function ShareLinkSection() {
               <Button variant="secondary" onClick={() => navigator.clipboard.writeText(url).then(() => toast.success('Link copied'), () => toast.error('Couldn’t copy'))}>
                 <Copy /> Copy link
               </Button>
-              <Button variant="ghost" className="text-destructive" disabled={busy} onClick={() => set(null)}>
+              <Button variant="ghost" className="text-destructive" disabled={busy} onClick={() => set(false)}>
                 Turn off
               </Button>
             </div>
           </>
         ) : (
-          <Button variant="secondary" className="w-full" disabled={busy} onClick={() => set(newShareToken())}>
+          <Button variant="secondary" className="w-full" disabled={busy} onClick={() => set(true)}>
             <Link2 /> Create read-only link
           </Button>
         )}

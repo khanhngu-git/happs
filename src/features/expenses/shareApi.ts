@@ -3,10 +3,12 @@
  * exactly one history entry authored by the caller, which is what the
  * security rules require (see firestore.rules → shares).
  */
-import { arrayUnion, collection, doc, serverTimestamp, Timestamp, updateDoc, writeBatch, type WriteBatch } from 'firebase/firestore'
+import { arrayUnion, collection, doc, getDoc, serverTimestamp, Timestamp, updateDoc, writeBatch, type WriteBatch } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import type { SettlementBatch, Share } from '@/lib/firestore'
 import { nextStatus, type PaymentMethod, type ShareAction } from '@/shared/shareState'
+import { formatMoney } from '@/shared/money'
+import { memberNames, notify } from '@/features/notifications/notify'
 
 export interface PaymentDetails {
   method: PaymentMethod | null
@@ -42,27 +44,53 @@ function applySent(b: WriteBatch | null, share: Share, uid: string, d: PaymentDe
   return b ? b.update(shareRef(share), data) : updateDoc(shareRef(share), data)
 }
 
+const expensesUrl = (tripId: string, refPath?: string) => `/trips/${tripId}/expenses${refPath ? `?share=${encodeURIComponent(refPath)}` : ''}`
+
+/** Tell the other side of a single payment what just happened. */
+async function notifyShare(share: Share, uid: string, kind: 'sent' | 'confirmed' | 'received' | 'disputed', reason = '') {
+  const name = await memberNames(share.tripId)
+  const amount = formatMoney(share.amountMinor, share.currency)
+  const title = share.expenseTitle || 'an expense'
+  const common = { tripId: share.tripId, refPath: share.path, url: expensesUrl(share.tripId, share.path) }
+  if (kind === 'sent') {
+    await notify(uid, [share.payerUid], { ...common, type: 'shareSent', title: `${name(uid)} says they sent you ${amount}`, body: `For ${title}. Confirm you received it?` })
+  } else if (kind === 'disputed') {
+    await notify(uid, [share.debtorUid], { ...common, type: 'shareDisputed', title: `${name(uid)} hasn’t received your ${amount}`, body: `For ${title}.${reason.trim() ? ` “${reason.trim()}”` : ''} Check the details and send again.` })
+  } else {
+    await notify(uid, [share.debtorUid], {
+      ...common,
+      type: 'shareConfirmed',
+      title: kind === 'received' ? `${name(uid)} marked ${amount} as received` : `${name(uid)} confirmed your ${amount}`,
+      body: `For ${title}. You’re all square on this one.`,
+    })
+  }
+}
+
 /** Debtor: "I've paid". */
 export async function markSent(share: Share, uid: string, d: PaymentDetails) {
   await applySent(null, share, uid, d, null)
+  void notifyShare(share, uid, 'sent')
 }
 
 /** Payer: "Confirm received". */
 export async function confirmShare(share: Share, uid: string) {
   const to = assertAllowed(share, uid, 'confirm')
   await updateDoc(shareRef(share), { status: to, history: arrayUnion(entry(to, uid)), updatedAt: serverTimestamp() })
+  void notifyShare(share, uid, 'confirmed')
 }
 
 /** Payer: "Not received", with a reason. */
 export async function disputeShare(share: Share, uid: string, reason: string) {
   const to = assertAllowed(share, uid, 'dispute')
   await updateDoc(shareRef(share), { status: to, history: arrayUnion(entry(to, uid, reason)), updatedAt: serverTimestamp() })
+  void notifyShare(share, uid, 'disputed', reason)
 }
 
 /** Payer: "Mark as received" for cash handed over in person. */
 export async function markReceived(share: Share, uid: string, method: PaymentMethod = 'cash') {
   const to = assertAllowed(share, uid, 'markReceived')
   await updateDoc(shareRef(share), { status: to, method, history: arrayUnion(entry(to, uid, 'Marked as received')), updatedAt: serverTimestamp() })
+  void notifyShare(share, uid, 'received')
 }
 
 /**
@@ -91,7 +119,28 @@ export async function settleAll(tripId: string, uid: string, toUid: string, shar
     for (const s of chunk) applySent(b, s, uid, d, batchRef.id)
     await b.commit()
   }
+  void notifyBatch(tripId, uid, toUid, 'sent', eligible.reduce((sum, s) => sum + s.amountBaseMinor, 0), eligible.length, batchRef.id)
   return batchRef.id
+}
+
+/** One notification per settle-up, not one per expense. */
+async function notifyBatch(tripId: string, uid: string, otherUid: string, status: 'sent' | 'confirmed' | 'disputed', totalBaseMinor: number, count: number, batchId: string) {
+  const [name, trip] = await Promise.all([memberNames(tripId), getDoc(doc(db, 'trips', tripId)).catch(() => null)])
+  const amount = formatMoney(totalBaseMinor, (trip?.get('baseCurrency') as string | undefined) ?? 'AUD')
+  const what = `${count} expense${count === 1 ? '' : 's'}`
+  const refPath = `trips/${tripId}/settlementBatches/${batchId}`
+  if (status === 'sent') {
+    await notify(uid, [otherUid], { type: 'shareSent', tripId, refPath, title: `${name(uid)} says they sent you ${amount}`, body: `To settle up ${what}. Confirm you received it?`, url: `/trips/${tripId}/expenses?batch=${batchId}` })
+  } else {
+    await notify(uid, [otherUid], {
+      type: status === 'confirmed' ? 'shareConfirmed' : 'shareDisputed',
+      tripId,
+      refPath,
+      title: status === 'confirmed' ? `${name(uid)} confirmed your ${amount}` : `${name(uid)} hasn’t received your ${amount}`,
+      body: status === 'confirmed' ? `You’ve settled up ${what}.` : 'Check the details and send again.',
+      url: expensesUrl(tripId),
+    })
+  }
 }
 
 /** Payer resolves a whole settlement batch in one go. */
@@ -104,4 +153,5 @@ export async function resolveBatch(batch: SettlementBatch, shares: Share[], uid:
   }
   b.update(doc(db, batch.path), { status: outcome })
   await b.commit()
+  void notifyBatch(batch.tripId, uid, batch.fromUid, outcome, batch.totalBaseMinor, batch.shareRefs.length, batch.id)
 }
