@@ -2,22 +2,23 @@
 
 Plan a group trip together: a day-by-day itinerary with stays, costs that become shared expenses, a payment flow where the person paid has to confirm they received it, and a map of everything. Mobile-first, installable, works offline.
 
-**Stack:** React 19 + Vite + TypeScript (strict) · Tailwind v4 + shadcn/ui (Apple HIG / Liquid Glass conventions, see `DECISIONS.md`) · React Router · react-hook-form + zod · Firebase (Auth, Firestore, Cloud Functions 2nd gen, Cloud Messaging, Hosting) · Google Maps Platform · Vitest, `@firebase/rules-unit-testing`, Playwright.
+**Stack:** React 19 + Vite + TypeScript (strict) · Tailwind v4 + shadcn/ui (Apple HIG / Liquid Glass conventions, see `DECISIONS.md`) · React Router · react-hook-form + zod · Firebase (Auth, Firestore, Hosting) · Google Maps Platform · Vitest, `@firebase/rules-unit-testing`, Playwright.
+
+**Runs on Firebase's free Spark plan.** There is no server: no Cloud Functions and no Cloud Storage. The app writes everything itself, and the Firestore security rules (tested in `tests/rules/`) keep the data honest. Photos and tickets are stored in Firestore documents. See "No server (Spark plan)" in `DECISIONS.md`.
 
 ## Project layout
 
 ```
 src/
   app/            router, layouts, install prompt
-  features/       auth · trips · invites · itinerary · expenses · map · notifications · profile
+  features/       auth · trips · invites · itinerary · expenses · map · notifications · profile · share
   shared/         money.ts, split.ts, balances.ts, shareState.ts, fx.ts, dates.ts, itinerary.ts, schemas.ts
-                  (pure, unit tested, used by the client AND Cloud Functions)
-  lib/            firebase.ts (init + emulator wiring), firestore.ts (zod converters + realtime hooks), functions.ts
+                  (pure, unit tested)
+  lib/            firebase.ts (init + emulator wiring), firestore.ts (zod converters + realtime hooks),
+                  uploads.ts (photos and tickets stored in Firestore), images.ts (resize + compress)
   components/ui/  shadcn/ui components
-  sw.ts           service worker: Workbox precache + FCM background messages
-storage.rules     photo uploads (avatars, trip covers)
-functions/        Cloud Functions (bundled with esbuild; imports src/shared via @shared/*)
-firestore.rules   security rules · firestore.indexes.json
+  sw.ts           service worker: Workbox precache for the offline app shell
+firestore.rules   security rules (the only "backend") · firestore.indexes.json
 tests/rules/      security rules tests · e2e/  Playwright
 scripts/dev/      act-as.mjs: act as another emulator user (handy for demoing payments)
 ```
@@ -28,10 +29,8 @@ Requirements: Node 22+, Java 21+ (for the Firestore emulator; on macOS `brew ins
 
 ```bash
 npm i
-npm --prefix functions i
-npm --prefix functions run build
 cp .env.example .env.local      # VITE_USE_EMULATORS=true is all you need locally
-npm run emulators               # Auth, Firestore, Functions, Hosting + UI on :4000
+npm run emulators               # Auth, Firestore, Hosting + UI on :4000
 npm run dev                     # http://localhost:5173 (in another terminal)
 ```
 
@@ -41,15 +40,13 @@ Or `npm run dev:all` for both in one terminal. With `VITE_USE_EMULATORS=true`, t
 
 ```bash
 # .env.local: VITE_USE_EMULATORS=true, VITE_AUTH_EMULATOR=false
-npm run emulators:real-auth     # Firestore, Functions, Storage under the real project id
+npm run emulators:real-auth     # Firestore under the real project id
 npm run dev
 ```
 
 This uses real Firebase Auth for the `happss` project, so accounts are real; the data lives in `./emulator-data-real`. Popup sign-in works in Chrome and Safari as is. Browsers that block popups (installed PWAs, some webviews, the Claude browser pane) fall back to a redirect, which needs same-origin auth: add `http://localhost:5173/__/auth/handler` to the OAuth client's **Authorized redirect URIs** (Google Cloud console → APIs & Services → Credentials → "Web client (auto created by Google Service)"), then set `VITE_AUTH_SAME_ORIGIN=true`.
 
-Rebuild functions after editing them: `npm --prefix functions run build:watch` keeps the emulator up to date.
-
-Each emulator suite (dev, rules tests, e2e) runs with its own `TMPDIR` under `.emulator-tmp/`. The Storage emulator keeps uploads in `$TMPDIR/firebase` and deletes that folder when it exits. With a shared folder, finishing a test run wiped the dev emulator's files, and the next photo upload crashed it.
+Each emulator suite (dev, rules tests, e2e) runs with its own `TMPDIR` under `.emulator-tmp/`, so test runs never touch the dev emulator's files.
 
 **If the emulators exit with "An unexpected error has occurred"**, a stray Firestore process can keep port 8080 busy. Clear it and start again:
 
@@ -61,7 +58,7 @@ pkill -f cloud-firestore-emulator; npm run emulators:real-auth
 
 ```bash
 npm test                 # unit tests (money, splits, FX, balances, state machine, dates, map)
-npm run test:rules       # Firestore + Storage rules tests (own emulators on other ports)
+npm run test:rules       # Firestore rules tests (own emulator on other ports)
 npm run test:e2e         # Playwright: own emulators (Auth emulator forced on) + own dev server on :5174
 npm run build && npx vite preview --port 4173 &
 E2E_BASE_URL=http://127.0.0.1:4173 npx playwright test e2e/pwa.spec.ts   # installability + offline shell
@@ -75,51 +72,29 @@ The client config for project `happss` goes in `.env.local` (see `.env.example`)
 1. **Firebase project + web app.** Copy the web config values into `.env.local` (`VITE_FIREBASE_*`). For production builds set `VITE_USE_EMULATORS=false` (or leave it, since it's ignored outside `npm run dev`).
 2. **Auth providers.** Enable **Google** and **Email/Password** in Authentication → Sign-in method. Under Settings → Authorized domains, add your Hosting domains (`happss.web.app`, `happss.firebaseapp.com`) and any preview channel domains.
    - Same-origin redirect sign-in: production builds use the current host as `authDomain` when served from `*.web.app` / `*.firebaseapp.com` (or set `VITE_AUTH_SAME_ORIGIN=true` for a custom domain on Firebase Hosting). Add `https://<your-domain>/__/auth/handler` to the Google OAuth client's **Authorized redirect URIs** in Google Cloud Console → APIs & Services → Credentials.
-3. **Storage.** Create the default bucket (Storage → Get started, same region). It holds profile photos and trip covers, which are resized to JPEG in the browser before upload. Deploy its rules with `firebase deploy --only storage`.
-4. **Firestore.** Create the database in production mode. Pick a region close to your users, e.g. `australia-southeast1`. Functions default to `australia-southeast1`; change `REGION` in `functions/src/admin.ts` and `VITE_FUNCTIONS_REGION` together if needed.
-5. **Blaze plan + budget alert.** Cloud Functions need the Blaze (pay-as-you-go) plan. A small test group fits within the free quotas, but set a budget alert (e.g. $5) in Google Cloud Billing first. Then deploy rules, indexes and functions: `firebase deploy --only firestore,storage,functions`.
-6. **Google Maps Platform.** In Google Cloud console, enable **Maps JavaScript API** and **Places API (New)**. Create a **Map ID** (Map Management, JavaScript, Vector) and an **API key restricted by HTTP referrer** to your domains (plus `localhost:5173` for dev). Set `VITE_GOOGLE_MAPS_API_KEY` and `VITE_GOOGLE_MAPS_MAP_ID`. Without a key the app still works: locations are typed in by hand and the Map tab shows a list.
-7. **Web push.** In Project settings → Cloud Messaging → Web Push certificates, generate a key pair and set `VITE_FCM_VAPID_KEY`. Push needs a production build (the service worker is off in `npm run dev`). On iPhone, push only works after the app is added to the Home Screen.
-8. **Install and run locally:** `npm i`, `npm run emulators`, `npm run dev` (see above).
-9. **Deploy.** `npm run build && firebase deploy` (hosting + rules + indexes + functions). Beta builds: `npm run build && firebase hosting:channel:deploy beta`.
+3. **Firestore.** Create the database in production mode, in a region close to your users (e.g. `australia-southeast1`). Then deploy the rules and indexes: `firebase deploy --only firestore`.
+4. **Google Maps Platform.** In Google Cloud console, enable **Maps JavaScript API** and **Places API (New)**. Create a **Map ID** (Map Management, JavaScript, Vector) and an **API key restricted by HTTP referrer** to your domains (plus `localhost:5173` for dev). Set `VITE_GOOGLE_MAPS_API_KEY` and `VITE_GOOGLE_MAPS_MAP_ID`. Without a key the app still works: locations are typed in by hand and the Map tab shows a list.
+5. **Install and run locally:** `npm i`, `npm run emulators`, `npm run dev` (see above).
+6. **Deploy.** `npm run build && firebase deploy` (hosting + rules + indexes). Beta builds: `npm run build && firebase hosting:channel:deploy beta`.
 
-Never commit service account keys. The Admin SDK key isn't needed for any of the above: deployed functions use their default service account, and local dev uses the emulators.
+Everything here works on the free **Spark** plan; no billing account is needed. Never commit service account keys; nothing in this project needs one.
 
 ## Production checklist
 
 These are one-time console or CLI steps; the code for each is already in place.
 
-1. **Deploy rules, indexes and functions** after pulling: `firebase deploy --only firestore,storage,functions`. The rules now cover payment details, ideas, read-only links, plan documents, `usage` counters and `clientErrors`.
-2. **App Check.** In the Firebase console, App Check → register the web app with **reCAPTCHA Enterprise** and put the site key in `VITE_APPCHECK_SITE_KEY`. Deploy the web app, check the App Check metrics show verified requests, then set `ENFORCE_APP_CHECK=true` in `functions/.env` and redeploy functions. From then on, callables reject requests that don't come from the app.
-3. **Daily limits on paid calls.** Hotel searches (20) and review lookups (30) per person per UTC day; change them with `HOTEL_SEARCH_DAILY_LIMIT` / `HOTEL_REVIEWS_DAILY_LIMIT` in `functions/.env`.
-4. **Budget alert.** Google Cloud Billing → Budgets & alerts, e.g. $10/month with email alerts at 50/90/100%. Also set daily quotas on the Maps key (Places API (New): Autocomplete, Place Details, Text Search).
-5. **Old notifications expire.** Add a TTL policy so Firestore deletes them after 90 days: `gcloud firestore fields ttls update expireAt --collection-group=notifications --enable-ttl --project=happss`.
-6. **Backups.** Turn on point-in-time recovery (`gcloud firestore databases update --database='(default)' --enable-pitr --project=happss`) and a daily backup schedule (`gcloud firestore backups schedules create --database='(default)' --recurrence=daily --retention=14d --project=happss`).
-7. **Content-Security-Policy** ships as `Content-Security-Policy-Report-Only` (`firebase.json`). After a week with no violations in the browser console on the live site, rename the header to `Content-Security-Policy` to enforce it.
-8. **Crash reports** land in the `clientErrors` collection (Firestore console). Add the same TTL policy there if you like: `--collection-group=clientErrors`.
-9. **CI** (`.github/workflows/ci.yml`) runs typecheck, lint, unit, rules and e2e tests on every push and pull request; no secrets needed.
-
-## Hotel finder (Apify · Trip.com)
-
-The itinerary's **+** → **Find a hotel** searches live Trip.com listings for the trip's destination, dates and group size. It uses the Apify Actor [`hotels-scrapers/trip-hotel-scraper`](https://apify.com/hotels-scrapers/trip-hotel-scraper). Choosing a hotel prefills a stay with:
-- the hotel name and check-in/check-out dates
-- the location, found with Google Places, so the stay appears on the map
-- a photo
-- the price as a shared cost in the trip's currency, paid by you and split equally
-
-You review the stay before saving it. Nothing is booked in the app.
-
-- The Apify token lives only in Cloud Functions (`functions/src/hotelFinder.ts`, secret `APIFY_TOKEN`).
-- **Local:** add it to `functions/.secret.local` (git-ignored) as `APIFY_TOKEN=...`, then restart the emulators.
-- **Deploy:** `firebase functions:secrets:set APIFY_TOKEN`.
-- **Cost:** each search is one Actor run, about US$0.07 for 20 hotels with residential proxies. Identical searches within 30 minutes are reused. Only trip members can search.
-- A search takes roughly 20–90 seconds (a real browser scrape), so the app shows a timer.
-- **Guest reviews:** in a hotel's details, **Show guest reviews** loads the 10 most relevant Trip.com reviews (overall score, sub-scores, text with translations) via the Apify Actor [`knagymate/trip-com-reviews-scraper`](https://apify.com/knagymate/trip-com-reviews-scraper). It costs about US$0.04 per hotel, uses the same `APIFY_TOKEN`, and is cached for 6 hours per hotel.
+1. **Deploy rules and indexes** after pulling: `firebase deploy --only firestore`. The app and the rules must match: the rules are what allows (and checks) joining, splitting costs, notifications and read-only links.
+2. **App Check** (optional). In the Firebase console, App Check → register the web app with **reCAPTCHA Enterprise** and put the site key in `VITE_APPCHECK_SITE_KEY`. Deploy the web app, check the metrics show verified requests, then enforce App Check for Cloud Firestore. From then on, scripts outside the app can't use the database.
+3. **Quotas.** Spark's free Firestore allowance is 50,000 reads and 20,000 writes a day and 1 GiB stored. Photos are compressed to fit (profile ≤ 45 KB, plan ≤ 120 KB, cover ≤ 180 KB; tickets up to ~650 KB each). Set daily quotas on the Maps key (Places API (New): Autocomplete, Place Details, Text Search).
+4. **Old notifications expire.** Add a TTL policy so Firestore deletes them after 90 days: `gcloud firestore fields ttls update expireAt --collection-group=notifications --enable-ttl --project=happss`.
+5. **Content-Security-Policy** ships as `Content-Security-Policy-Report-Only` (`firebase.json`). After a week with no violations in the browser console on the live site, rename the header to `Content-Security-Policy` to enforce it.
+6. **Crash reports** land in the `clientErrors` collection (Firestore console). Add the same TTL policy there if you like: `--collection-group=clientErrors`.
+7. **CI** (`.github/workflows/ci.yml`) runs typecheck, lint, unit, rules and e2e tests on every push and pull request; no secrets needed.
 
 ## How the money works
 
 - Amounts are **integers in minor units** (cents, fen, yen). `src/shared/money.ts` parses user input with string arithmetic. Floats appear only transiently when applying an FX rate, and the result is rounded straight back to an integer.
 - **Equal splits** hand leftover cents to the first members in sorted uid order ($100 / 3 → 33.34 / 33.33 / 33.33). **Percent splits** are stored in basis points and must total exactly 100%. **Exact splits** must add up to the total.
 - Each expense captures `fxRateToBase` at entry (prefilled from Frankfurter, user editable). Base-currency shares are allocated from the converted total so they always add up exactly.
-- **Shares are generated by the `onExpenseWrite` Cloud Function**, never by clients, and are frozen once money has moved (any non-payer share past `unpaid`).
+- **Shares are written in the same batch as their expense** (`stageShares` in `src/features/expenses/expenseApi.ts`). The rules check each share matches the expense (payer, participants, currency, title, a fresh `unpaid` state). Once money has moved (any non-payer share past `unpaid`), shares are frozen: they can't be rewritten or deleted on their own.
 - **Only confirmed shares count as paid.** A share moves `unpaid → sent → confirmed` (or `disputed → sent` again), or the payer marks it received in cash. The rules enforce who may make each move, keep amounts immutable, and keep the history append-only.
