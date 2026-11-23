@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
-import { Crown, Link2, LogOut, MoreHorizontal, QrCode, UserPlus } from 'lucide-react'
+import { Crown, LogOut, MoreHorizontal, QrCode, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -31,6 +31,8 @@ export function MembersTab() {
   const [removing, setRemoving] = useState<Member | null>(null)
   const [promoting, setPromoting] = useState<Member | null>(null)
   const [leaving, setLeaving] = useState(false)
+  /** An existing invite whose QR code and link are shown again. */
+  const [showing, setShowing] = useState<string | null>(null)
   const navigate = useNavigate()
   const { data: invites } = useInvites(trip.id)
   const { data: shares } = useTripShares(trip.id)
@@ -94,15 +96,22 @@ export function MembersTab() {
         ) : (
           <ul className="divide-y divide-border/70 overflow-hidden rounded-[1.25rem] bg-card ring-1 ring-border/70">
             {active.map((i) => (
-              <li key={i.id} className="flex min-h-14 items-center gap-3 px-4 py-2">
-                <Link2 className="size-5 shrink-0 text-muted-foreground" aria-hidden />
-                <div className="min-w-0 flex-1 text-sm">
-                  <p className="truncate font-mono">…/join/{i.id}</p>
-                  <p className="text-muted-foreground">
-                    {i.uses} joined{i.maxUses ? ` of ${i.maxUses}` : ''} ·{' '}
-                    {i.expiresAt ? `expires ${formatInstantDate(i.expiresAt.toDate())}` : 'never expires'}
-                  </p>
-                </div>
+              <li key={i.id} className="flex min-h-14 items-center gap-3 py-2 pr-4">
+                <button
+                  type="button"
+                  onClick={() => setShowing(i.id)}
+                  className="flex min-h-12 min-w-0 flex-1 items-center gap-3 pl-4 text-left active:opacity-60"
+                  aria-label={`Show QR code and link for invite ${i.id}`}
+                >
+                  <QrCode className="size-5 shrink-0 text-primary" aria-hidden />
+                  <span className="min-w-0 flex-1 text-sm">
+                    <span className="block truncate font-mono">…/join/{i.id}</span>
+                    <span className="block text-muted-foreground">
+                      {i.uses} joined{i.maxUses ? ` of ${i.maxUses}` : ''} ·{' '}
+                      {i.expiresAt ? `expires ${formatInstantDate(i.expiresAt.toDate())}` : 'never expires'}
+                    </span>
+                  </span>
+                </button>
                 <Button
                   size="sm"
                   variant="destructive"
@@ -124,6 +133,7 @@ export function MembersTab() {
 
       <Fab label="Invite friends" extended withTabBar icon={<UserPlus className="size-5" aria-hidden />} onClick={() => setInviteOpen(true)} />
       <InviteDialog open={inviteOpen} onOpenChange={setInviteOpen} />
+      <InviteDialog open={!!showing} onOpenChange={(o) => !o && setShowing(null)} existingCode={showing} />
 
       <ConfirmDialog
         open={!!removing}

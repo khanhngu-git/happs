@@ -10,7 +10,8 @@ import { useUser } from '@/features/auth/AuthProvider'
 import { useTrip } from '@/features/trips/TripContext'
 import { createInvite, inviteUrl, shareLink } from './inviteApi'
 
-export function InviteDialog({ open, onOpenChange }: { open: boolean; onOpenChange(o: boolean): void }) {
+/** Create an invite link, or (with `existingCode`) show one again: its QR code and link. */
+export function InviteDialog({ open, onOpenChange, existingCode = null }: { open: boolean; onOpenChange(o: boolean): void; existingCode?: string | null }) {
   const user = useUser()
   const { trip, members } = useTrip()
   const [expires, setExpires] = useState('7')
@@ -18,7 +19,8 @@ export function InviteDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   const [code, setCode] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const url = code ? inviteUrl(code) : ''
+  const current = existingCode ?? code
+  const url = current ? inviteUrl(current) : ''
 
   async function create() {
     setBusy(true)
@@ -50,7 +52,7 @@ export function InviteDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           <DialogTitle>Invite friends</DialogTitle>
           <DialogDescription className="text-foreground/80">Anyone with the link can join {trip.name}.</DialogDescription>
         </DialogHeader>
-        {!code ? (
+        {!current ? (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
