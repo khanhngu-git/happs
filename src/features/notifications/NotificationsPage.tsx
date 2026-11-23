@@ -1,10 +1,25 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
-import { getDocs, limit, orderBy, query, updateDoc, writeBatch, doc } from 'firebase/firestore'
-import { BellOff, CheckCheck, CircleAlert, CircleCheck, Clock, Send, UserPlus, CalendarDays, Receipt, Trash2, Plane } from 'lucide-react'
+import { deleteDoc, getDocs, limit, orderBy, query, updateDoc, writeBatch, doc } from 'firebase/firestore'
+import {
+  BellOff,
+  CheckCheck,
+  CircleAlert,
+  CircleCheck,
+  Clock,
+  Send,
+  UserPlus,
+  CalendarDays,
+  Receipt,
+  Trash2,
+  Plane,
+  Mail,
+  MailOpen,
+} from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { SwipeRow } from '@/components/SwipeRow'
 import { EmptyState } from '@/components/EmptyState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useUser } from '@/features/auth/AuthProvider'
@@ -39,7 +54,10 @@ export function NotificationsPage() {
   const user = useUser()
   const navigate = useNavigate()
   const wants = useWantsNotification()
-  const { data: all, loading } = useLiveQuery<AppNotification>(query(refs.notifications(user.uid), orderBy('createdAt', 'desc'), limit(60)), `notifs:${user.uid}`)
+  const { data: all, loading } = useLiveQuery<AppNotification>(
+    query(refs.notifications(user.uid), orderBy('createdAt', 'desc'), limit(60)),
+    `notifs:${user.uid}`,
+  )
   const data = all.filter(wants)
   const unread = data.filter((n) => !n.read)
 
@@ -76,11 +94,23 @@ export function NotificationsPage() {
           all.length > 0 && (
             <div className="flex items-center">
               {unread.length > 0 && (
-                <button type="button" onClick={markAll} aria-label="Mark all as read" title="Mark all as read" className="inline-flex size-11 items-center justify-center rounded-full text-primary active:opacity-60">
+                <button
+                  type="button"
+                  onClick={markAll}
+                  aria-label="Mark all as read"
+                  title="Mark all as read"
+                  className="text-primary inline-flex size-11 items-center justify-center rounded-full active:opacity-60"
+                >
                   <CheckCheck className="size-[1.375rem]" aria-hidden />
                 </button>
               )}
-              <button type="button" onClick={() => setClearing(true)} aria-label="Clear all notifications" title="Clear all" className="inline-flex size-11 items-center justify-center rounded-full text-destructive active:opacity-60">
+              <button
+                type="button"
+                onClick={() => setClearing(true)}
+                aria-label="Clear all notifications"
+                title="Clear all"
+                className="text-destructive inline-flex size-11 items-center justify-center rounded-full active:opacity-60"
+              >
                 <Trash2 className="size-[1.375rem]" aria-hidden />
               </button>
             </div>
@@ -95,26 +125,66 @@ export function NotificationsPage() {
               <Skeleton className="h-16 rounded-[1.25rem]" />
             </div>
           ) : data.length === 0 ? (
-            <EmptyState icon={<BellOff />} title="You’re all caught up" description="Payment updates and new members will show up here." />
+            <EmptyState
+              icon={<BellOff />}
+              title="You’re all caught up"
+              description="Payment updates and new members will show up here."
+            />
           ) : (
-            <ul className="divide-y divide-border/70 overflow-hidden rounded-[1.25rem] bg-card ring-1 ring-border/70">
+            <ul className="divide-border/70 bg-card ring-border/70 divide-y overflow-hidden rounded-[1.25rem] ring-1">
               {data.map((n) => {
                 const Icon = ICON[n.type] ?? Send
                 return (
                   <li key={n.id}>
-                    <button type="button" onClick={() => open(n)} className="flex min-h-16 w-full items-start gap-3 px-4 py-3 text-left outline-none hover:bg-foreground/[0.03] focus-visible:bg-foreground/5">
-                      <span className={cn('mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full', n.type === 'shareDisputed' ? 'bg-destructive/12 text-destructive' : 'bg-primary/12 text-primary')} aria-hidden>
-                        <Icon className="size-4.5" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className={cn('block', !n.read && 'font-semibold')}>{n.title}</span>
-                        {n.body && <span className="block text-sm text-muted-foreground">{n.body}</span>}
-                        <span className="block text-xs text-muted-foreground">{n.createdAt ? relative(n.createdAt.toMillis()) : ''}</span>
-                      </span>
-                      {!n.read && (
-                        <span className="mt-2 size-2.5 shrink-0 rounded-full bg-primary" aria-label="Unread" />
-                      )}
-                    </button>
+                    <SwipeRow
+                      leading={{
+                        label: n.read ? 'Unread' : 'Read',
+                        icon: n.read ? (
+                          <Mail className="size-5" aria-hidden />
+                        ) : (
+                          <MailOpen className="size-5" aria-hidden />
+                        ),
+                        className: 'bg-primary',
+                        onAction: () =>
+                          void updateDoc(doc(db, n.path), { read: !n.read }).catch(() =>
+                            toast.error('Couldn’t update'),
+                          ),
+                      }}
+                      trailing={{
+                        label: 'Delete',
+                        icon: <Trash2 className="size-5" aria-hidden />,
+                        className: 'bg-destructive',
+                        onAction: () => void deleteDoc(doc(db, n.path)).catch(() => toast.error('Couldn’t delete')),
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => open(n)}
+                        className="hover:bg-foreground/[0.03] focus-visible:bg-foreground/5 flex min-h-16 w-full items-start gap-3 px-4 py-3 text-left outline-none"
+                      >
+                        <span
+                          className={cn(
+                            'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full',
+                            n.type === 'shareDisputed'
+                              ? 'bg-destructive/12 text-destructive'
+                              : 'bg-primary/12 text-primary',
+                          )}
+                          aria-hidden
+                        >
+                          <Icon className="size-4.5" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className={cn('block', !n.read && 'font-semibold')}>{n.title}</span>
+                          {n.body && <span className="text-muted-foreground block text-sm">{n.body}</span>}
+                          <span className="text-muted-foreground block text-xs">
+                            {n.createdAt ? relative(n.createdAt.toMillis()) : ''}
+                          </span>
+                        </span>
+                        {!n.read && (
+                          <span className="bg-primary mt-2 size-2.5 shrink-0 rounded-full" aria-label="Unread" />
+                        )}
+                      </button>
+                    </SwipeRow>
                   </li>
                 )
               })}
