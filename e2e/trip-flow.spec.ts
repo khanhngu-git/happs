@@ -42,7 +42,7 @@ test('two friends plan a trip and settle a cost', async ({ browser }) => {
 
   // Alex sees Sam join live.
   await a.getByRole('link', { name: 'Members' }).click()
-  await expect(a.getByText(sam.name)).toBeVisible()
+  await expect(a.getByText(sam.name, { exact: true })).toBeVisible()
 
   // 4. Alex adds a dinner with a cost split equally between both.
   await a.getByRole('link', { name: 'Itinerary' }).click()
@@ -54,17 +54,17 @@ test('two friends plan a trip and settle a cost', async ({ browser }) => {
   await a.getByRole('switch', { name: 'This has a cost' }).click()
   await a.getByLabel('Amount', { exact: true }).fill('100')
   await a.getByRole('button', { name: 'Add', exact: true }).click()
-  await expect(a.getByText('Dinner at Lost Heaven')).toBeVisible()
+  await expect(a.getByText('Dinner at Lost Heaven', { exact: true })).toBeVisible()
 
   // Sam sees the plan appear live in their itinerary.
-  await expect(b.getByText('Dinner at Lost Heaven')).toBeVisible()
+  await expect(b.getByText('Dinner at Lost Heaven', { exact: true })).toBeVisible()
 
   // 5. Sam marks their half as paid.
   await b.getByRole('link', { name: 'Expenses' }).click()
   const youOwe = b.getByRole('region', { name: 'You owe' })
   await expect(youOwe.getByText(alex.name)).toBeVisible()
   await expect(youOwe.getByText('A$50.00')).toBeVisible()
-  await b.getByText('Dinner at Lost Heaven').click()
+  await b.getByText('Dinner at Lost Heaven', { exact: true }).click()
   await b.getByRole('button', { name: 'I’ve paid' }).click()
   await b.getByRole('radio', { name: 'PayID' }).click()
   await b.getByLabel('Reference (optional)').fill('E2E-REF')
