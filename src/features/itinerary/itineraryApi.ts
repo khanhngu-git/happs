@@ -7,7 +7,7 @@ import { refreshSharedTrip } from '@/features/share/shareApi'
 import { memberNames, notify } from '@/features/notifications/notify'
 import { formatShortDate } from '@/shared/dates'
 import type { ItemType } from '@/shared/itinerary'
-import type { Attachment, Location } from '@/shared/schemas'
+import type { Attachment, Location, PhotoCredit } from '@/shared/schemas'
 import { costToExpense, expenseFields, notifyNewExpense, sharesLocked, SharesLockedError, stageExpenseDelete, stageShares, type ItemCost } from '@/features/expenses/expenseApi'
 
 export function useItems(tripId: string) {
@@ -29,6 +29,8 @@ export interface ItemValues {
   bookingUrl: string
   bookingRef: string
   photoURL: string | null
+  /** Cleared when someone replaces or removes the photo. */
+  photoCredit?: PhotoCredit | null
   attachments?: Attachment[]
 }
 

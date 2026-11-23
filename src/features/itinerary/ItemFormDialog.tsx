@@ -188,6 +188,8 @@ export function ItemFormDialog({
           bookingUrl: v.bookingUrl,
           bookingRef: v.bookingRef,
           photoURL,
+          // A new or removed photo isn't the credited one any more.
+          photoCredit: photo === undefined ? (item?.photoCredit ?? null) : null,
           attachments,
         },
       })

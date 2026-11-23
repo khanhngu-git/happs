@@ -397,7 +397,7 @@ service cloud.firestore {
         function validItem(d) {
           return d.keys().hasAll(['type', 'title', 'date', 'createdBy'])
             && d.keys().hasOnly(['type', 'title', 'date', 'startTime', 'endTime', 'checkIn', 'checkOut', 'location', 'toLocation',
-                                 'notes', 'bookingUrl', 'bookingRef', 'order', 'linkedExpenseId', 'photoURL', 'attachments', 'meta', 'createdBy',
+                                 'notes', 'bookingUrl', 'bookingRef', 'order', 'linkedExpenseId', 'photoURL', 'photoCredit', 'attachments', 'meta', 'createdBy',
                                  'createdAt', 'updatedAt'])
             && d.type in ['activity', 'food', 'transport', 'stay', 'other']
             && isNonEmptyStr(d.title, 200)
@@ -410,6 +410,11 @@ service cloud.firestore {
             && validLocation(d.get('toLocation', null))
             && (!('attachments' in d) || (d.attachments is list && d.attachments.size() <= 10))
             && validMeta(d.get('meta', null))
+            && (d.get('photoCredit', null) == null || (d.photoCredit is map
+                && d.photoCredit.keys().hasOnly(['author', 'license', 'licenseUrl', 'sourceUrl'])
+                && isStr(d.photoCredit.author, 300) && isStr(d.photoCredit.license, 100)
+                && (d.photoCredit.licenseUrl == null || isStr(d.photoCredit.licenseUrl, 500))
+                && isStr(d.photoCredit.sourceUrl, 500)))
             && optStr(d, 'notes', 5000)
             && optStr(d, 'bookingUrl', 2000)
             && optStr(d, 'bookingRef', 200)

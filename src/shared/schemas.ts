@@ -164,6 +164,15 @@ export const itemMetaSchema = z.object({
 })
 export type ItemMeta = z.infer<typeof itemMetaSchema>
 
+/** Who took a photo and its licence, for freely licensed photos (e.g. from Wikimedia Commons). */
+export const photoCreditSchema = z.object({
+  author: z.string(),
+  license: z.string(),
+  licenseUrl: z.string().nullable().default(null),
+  sourceUrl: z.string(),
+})
+export type PhotoCredit = z.infer<typeof photoCreditSchema>
+
 export const itemSchema = z.object({
   type: itemTypeSchema,
   title: z.string(),
@@ -181,6 +190,7 @@ export const itemSchema = z.object({
   order: z.number().default(0),
   linkedExpenseId: z.string().nullable().default(null),
   photoURL: z.string().nullable().default(null),
+  photoCredit: photoCreditSchema.nullable().default(null),
   attachments: z.array(attachmentSchema).default([]),
   meta: itemMetaSchema.nullable().default(null),
   createdBy: z.string(),

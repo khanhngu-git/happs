@@ -10,6 +10,7 @@ import type { Item } from '@/lib/firestore'
 import { preloadAttachments } from '@/lib/uploads'
 import { FileViewer } from './FileViewer'
 import { ItemMetaSection } from './ItemMetaSection'
+import { PhotoCreditLine } from './PhotoCreditLine'
 import type { Attachment, Location } from '@/shared/schemas'
 import { formatLongDate } from '@/shared/dates'
 import { ItemTypeIcon } from './ItemTypeIcon'
@@ -36,7 +37,12 @@ export function ItemSheet({ item, onOpenChange, onEdit }: { item: Item | null; o
     <>
       <Dialog open={!!item} onOpenChange={onOpenChange}>
         <DialogContent>
-          {item.photoURL && <img src={item.photoURL} alt="" className="aspect-[16/9] w-full rounded-2xl object-cover" />}
+          {item.photoURL && (
+            <figure>
+              <img src={item.photoURL} alt="" className="aspect-[16/9] w-full rounded-2xl object-cover" />
+              {item.photoCredit && <PhotoCreditLine credit={item.photoCredit} />}
+            </figure>
+          )}
           <DialogHeader className="flex-row items-center gap-3">
             <ItemTypeIcon type={item.type} title={item.title} className="size-12" />
             <div className="min-w-0">

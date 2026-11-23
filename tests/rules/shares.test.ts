@@ -355,6 +355,13 @@ describe('expenses and items', () => {
     await assertFails(setDoc(doc(db(env, MEMBER), `trips/${TRIP}/items/act-3`), item({ ...good, extra: 1 })))
     await assertFails(setDoc(doc(db(env, MEMBER), `trips/${TRIP}/items/act-4`), item({ ...good, todo: Array.from({ length: 31 }, (_, i) => `x${i}`) })))
   })
+  it('items: a photo may carry its credit (author, licence, source)', async () => {
+    const item = (photoCredit: unknown) => ({ type: 'activity', title: 'Yu Garden', date: '2026-12-06', createdBy: MEMBER, photoCredit })
+    const credit = { author: 'Jane Doe', license: 'CC BY-SA 4.0', licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0', sourceUrl: 'https://commons.wikimedia.org/wiki/File:Yu_Garden.jpg' }
+    await assertSucceeds(setDoc(doc(db(env, MEMBER), `trips/${TRIP}/items/yu-1`), item(credit)))
+    await assertFails(setDoc(doc(db(env, MEMBER), `trips/${TRIP}/items/yu-2`), item({ ...credit, extra: 1 })))
+    await assertFails(setDoc(doc(db(env, MEMBER), `trips/${TRIP}/items/yu-3`), item({ ...credit, author: 'x'.repeat(301) })))
+  })
   it('items: a location may carry its local-language name and address', async () => {
     const loc = { placeId: 'p1', name: 'The Bund', address: 'Shanghai, China', lat: 31.24, lng: 121.49 }
     await assertSucceeds(setDoc(doc(db(env, MEMBER), `trips/${TRIP}/items/i7`), item(MEMBER, { location: { ...loc, localName: '外滩', localAddress: '中国上海市中山东一路' } })))
