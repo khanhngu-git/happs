@@ -15,6 +15,7 @@ import { useAuth, useUser } from '@/features/auth/AuthProvider'
 import { addPasswordToAccount, authErrorMessage, linkGoogle, signOut } from '@/features/auth/authApi'
 import { db } from '@/lib/firebase'
 import { AccountDeletionError, deleteMyAccount, useMyTrips } from '@/features/trips/tripApi'
+import { alertsState, disableAlerts, enableAlerts, type AlertsState } from '@/features/notifications/alerts'
 import { COMMON_CURRENCIES } from '@/shared/money'
 import { DEFAULT_NOTIFICATION_PREFS, type NotificationType, type PayTo } from '@/shared/schemas'
 import { FeedbackDialog } from './FeedbackDialog'
@@ -26,7 +27,8 @@ import { FullScreenLoader } from '@/components/FullScreenLoader'
 /**
  * A few simple switches for what shows in Notifications. Each covers a group
  * of notification types (see NotificationType); a group is "on" if any of its
- * types is. Notifications are in-app only (there's no server to send pushes).
+ * types is. They show in the app, and as phone alerts while happs is running
+ * (there's no server to push them once it's closed).
  */
 const PREF_GROUPS: { key: string; title: string; hint: string; types: NotificationType[] }[] = [
   { key: 'itinerary', title: 'Itinerary changes', hint: 'Plans added or edited', types: ['itemChanged'] },
@@ -59,6 +61,7 @@ function ProfileForm() {
   const payToSaved = JSON.stringify({ payId: profile?.payTo?.payId ?? '', paypalMe: profile?.payTo?.paypalMe ?? '', bank: profile?.payTo?.bank ?? '' })
   const [password, setPassword] = useState('')
   const [feedback, setFeedback] = useState(false)
+  const [alerts, setAlerts] = useState<AlertsState>(() => alertsState())
   const [deleting, setDeleting] = useState(false)
   const providers = user.providerData.map((p) => p.providerId)
   const googlePhoto = user.providerData.find((p) => p.providerId === 'google.com')?.photoURL
@@ -196,6 +199,32 @@ function ProfileForm() {
         </Group>
 
         <Group title="Notifications">
+          <div className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
+            <div>
+              <p className="text-[1.0625rem]">Alerts on this device</p>
+              <p className="text-sm text-muted-foreground">
+                {alerts === 'on' && 'Shown while happs is open or in the background.'}
+                {alerts === 'off' && 'Get a phone alert for new notifications while happs is open or in the background.'}
+                {alerts === 'denied' && 'Blocked in your browser or phone settings.'}
+                {alerts === 'unsupported' && 'Not supported here. On iPhone, add happs to your Home Screen first.'}
+              </p>
+            </div>
+            <Switch
+              checked={alerts === 'on'}
+              disabled={alerts === 'unsupported' || alerts === 'denied'}
+              aria-label="Alerts on this device"
+              onCheckedChange={async (on) => {
+                if (on) {
+                  const s = await enableAlerts()
+                  setAlerts(s)
+                  if (s === 'denied') toast.error('Alerts are blocked in your browser or phone settings.')
+                } else {
+                  disableAlerts()
+                  setAlerts('off')
+                }
+              }}
+            />
+          </div>
           {PREF_GROUPS.map((g) => (
             <label key={g.key} className="flex min-h-14 cursor-pointer items-center justify-between gap-3 px-4 py-2.5">
               <span>
