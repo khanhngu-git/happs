@@ -396,7 +396,7 @@ service cloud.firestore {
 
         function validItem(d) {
           return d.keys().hasAll(['type', 'title', 'date', 'createdBy'])
-            && d.keys().hasOnly(['type', 'title', 'date', 'startTime', 'endTime', 'checkIn', 'checkOut', 'location',
+            && d.keys().hasOnly(['type', 'title', 'date', 'startTime', 'endTime', 'checkIn', 'checkOut', 'location', 'toLocation',
                                  'notes', 'bookingUrl', 'bookingRef', 'order', 'linkedExpenseId', 'photoURL', 'attachments', 'meta', 'createdBy',
                                  'createdAt', 'updatedAt'])
             && d.type in ['activity', 'food', 'transport', 'stay', 'other']
@@ -407,6 +407,7 @@ service cloud.firestore {
             && validDateTime(d.get('checkIn', null))
             && validDateTime(d.get('checkOut', null))
             && validLocation(d.get('location', null))
+            && validLocation(d.get('toLocation', null))
             && (!('attachments' in d) || (d.attachments is list && d.attachments.size() <= 10))
             && validMeta(d.get('meta', null))
             && optStr(d, 'notes', 5000)

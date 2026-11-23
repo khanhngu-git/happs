@@ -38,6 +38,7 @@ function snapshot(trip: Trip, items: Item[]) {
       checkIn: i.checkIn ?? null,
       checkOut: i.checkOut ?? null,
       location: i.location ?? null,
+      toLocation: i.toLocation ?? null,
       photoURL: null,
       order: i.order ?? 0,
     })),

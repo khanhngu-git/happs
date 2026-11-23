@@ -19,6 +19,8 @@ interface Props {
   bias?: LatLng | null
   /** Also fetch the place's name and address in this language (e.g. zh-CN for taxi drivers in China). */
   localLanguage?: string | null
+  /** Field label (default "Location"; "From" / "To" for transport). */
+  label?: string
 }
 
 /** Places Autocomplete (New) when a Maps key is configured; plain text fields otherwise. */
@@ -26,10 +28,10 @@ export function PlacePicker(props: Props) {
   return hasMaps ? <PlacesAutocomplete {...props} /> : <ManualPlace {...props} />
 }
 
-function ManualPlace({ id, value, onChange }: Props) {
+function ManualPlace({ id, value, onChange, label = 'Location' }: Props) {
   return (
     <div className="space-y-2">
-      <Label htmlFor={id}>Location</Label>
+      <Label htmlFor={id}>{label}</Label>
       <Input
         id={id}
         placeholder="Place name"
@@ -60,7 +62,7 @@ const BIAS_RADIUS_M = 50_000
 
 const typedPlace = (text: string): Location => ({ placeId: null, name: text.trim(), address: '', lat: null, lng: null })
 
-function PlacesAutocomplete({ id, value, onChange, bias, localLanguage }: Props) {
+function PlacesAutocomplete({ id, value, onChange, bias, localLanguage, label = 'Location' }: Props) {
   const places = useMapsLibrary('places')
   const [text, setText] = useState('')
   const [open, setOpen] = useState(false)
@@ -151,7 +153,7 @@ function PlacesAutocomplete({ id, value, onChange, bias, localLanguage }: Props)
   if (value) {
     return (
       <div className="space-y-2">
-        <Label>Location</Label>
+        <Label>{label}</Label>
         <div className="flex items-center gap-3 rounded-xl bg-card px-3 py-2 ring-1 ring-input">
           <MapPin className="size-5 shrink-0 text-primary" aria-hidden />
           <div className="min-w-0 flex-1">
@@ -159,7 +161,7 @@ function PlacesAutocomplete({ id, value, onChange, bias, localLanguage }: Props)
             {value.address && <p className="truncate text-sm text-muted-foreground">{value.address}</p>}
             {value.lat === null && <p className="text-sm text-muted-foreground">Not on the map: pick a search result to pin it.</p>}
           </div>
-          <button type="button" className="inline-flex size-11 items-center justify-center rounded-full hover:bg-foreground/6" aria-label="Remove location" onClick={() => onChange(null)}>
+          <button type="button" className="inline-flex size-11 items-center justify-center rounded-full hover:bg-foreground/6" aria-label={`Remove ${label.toLowerCase()}`} onClick={() => onChange(null)}>
             <X className="size-4" />
           </button>
         </div>
@@ -171,7 +173,7 @@ function PlacesAutocomplete({ id, value, onChange, bias, localLanguage }: Props)
   const listId = `${id}-list`
   return (
     <div className="relative space-y-2">
-      <Label htmlFor={id}>Location</Label>
+      <Label htmlFor={id}>{label}</Label>
       <div className="relative">
         <Input
           id={id}

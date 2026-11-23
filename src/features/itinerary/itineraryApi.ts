@@ -23,6 +23,8 @@ export interface ItemValues {
   checkIn: { date: string; time: string | null } | null
   checkOut: { date: string; time: string | null } | null
   location: Location | null
+  /** Transport only: where it goes. */
+  toLocation?: Location | null
   notes: string
   bookingUrl: string
   bookingRef: string
@@ -82,7 +84,7 @@ export async function saveItem(opts: { trip: Trip; uid: string; existing: Item |
 }
 
 /** Fields whose change is worth telling others about (not reordering, notes etc). */
-const MEANINGFUL = ['title', 'date', 'startTime', 'endTime', 'location', 'checkIn', 'checkOut', 'type'] as const
+const MEANINGFUL = ['title', 'date', 'startTime', 'endTime', 'location', 'toLocation', 'checkIn', 'checkOut', 'type'] as const
 
 /** "Alex added Yu Garden" for the other members (off by default in their settings). */
 async function notifyItemChanged(trip: Trip, uid: string, itemId: string, v: ItemValues, edited: boolean) {

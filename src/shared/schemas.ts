@@ -173,6 +173,8 @@ export const itemSchema = z.object({
   checkIn: dateTime.nullable().default(null),
   checkOut: dateTime.nullable().default(null),
   location: locationSchema.nullable().default(null),
+  /** Transport only: where it goes (`location` is where it leaves from). */
+  toLocation: locationSchema.nullable().default(null),
   notes: z.string().default(''),
   bookingUrl: z.string().default(''),
   bookingRef: z.string().default(''),
@@ -295,7 +297,7 @@ export interface SharedTrip {
   timeZone: string
   coverEmoji: string | null
   coverPhotoURL: string | null
-  items: Array<Pick<ItemDoc, 'type' | 'title' | 'date' | 'startTime' | 'endTime' | 'checkIn' | 'checkOut' | 'location' | 'photoURL' | 'order'> & { id: string }>
+  items: Array<Pick<ItemDoc, 'type' | 'title' | 'date' | 'startTime' | 'endTime' | 'checkIn' | 'checkOut' | 'location' | 'photoURL' | 'order'> & { id: string; toLocation?: ItemDoc['toLocation'] }>
 }
 
 /** Something someone wants to do, not yet on a day. Members vote; anyone can put it in the plan. */

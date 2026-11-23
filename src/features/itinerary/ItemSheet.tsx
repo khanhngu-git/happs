@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CalendarDays, ExternalLink, FileText, MapPin, Pencil, Ticket, Trash2 } from 'lucide-react'
+import { CalendarDays, ExternalLink, FileText, Flag, MapPin, Pencil, Ticket, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -10,7 +10,7 @@ import type { Item } from '@/lib/firestore'
 import { preloadAttachments } from '@/lib/uploads'
 import { FileViewer } from './FileViewer'
 import { ItemMetaSection } from './ItemMetaSection'
-import type { Attachment } from '@/shared/schemas'
+import type { Attachment, Location } from '@/shared/schemas'
 import { formatLongDate } from '@/shared/dates'
 import { ItemTypeIcon } from './ItemTypeIcon'
 import { googleMapsUrl, timeLabel } from './format'
@@ -50,23 +50,8 @@ export function ItemSheet({ item, onOpenChange, onEdit }: { item: Item | null; o
               <CalendarDays className="size-5 shrink-0 text-muted-foreground" aria-hidden />
               {when}
             </li>
-            {item.location && (
-              <li>
-                <a href={googleMapsUrl(item.location)} target="_blank" rel="noreferrer" className="flex gap-3 px-4 py-3 active:bg-foreground/[0.06]">
-                  <MapPin className="size-5 shrink-0 text-muted-foreground" aria-hidden />
-                  <span className="min-w-0 flex-1">
-                    <span className="block">{item.location.name}</span>
-                    {item.location.address && <span className="block text-muted-foreground">{item.location.address}</span>}
-                    {item.location.localName && item.location.localName !== item.location.name && (
-                      <span className="block text-muted-foreground" lang="zh-CN">
-                        {item.location.localName}
-                      </span>
-                    )}
-                  </span>
-                  <ExternalLink className="size-4 shrink-0 text-primary" aria-label="Open in Google Maps" />
-                </a>
-              </li>
-            )}
+            {item.location && <PlaceRow place={item.location} label={item.toLocation ? 'From' : null} icon={<MapPin className="size-5 shrink-0 text-muted-foreground" aria-hidden />} />}
+            {item.toLocation && <PlaceRow place={item.toLocation} label="To" icon={<Flag className="size-5 shrink-0 text-muted-foreground" aria-hidden />} />}
             {(item.bookingRef || item.bookingUrl) && (
               <li className="flex gap-3 px-4 py-3">
                 <Ticket className="size-5 shrink-0 text-muted-foreground" aria-hidden />
@@ -129,3 +114,25 @@ export function ItemSheet({ item, onOpenChange, onEdit }: { item: Item | null; o
   )
 }
 
+
+/** A place in the details list, opening Google Maps. "From"/"To" label for journeys. */
+function PlaceRow({ place, label, icon }: { place: Location; label: string | null; icon: React.ReactNode }) {
+  return (
+    <li>
+      <a href={googleMapsUrl(place)} target="_blank" rel="noreferrer" className="flex gap-3 px-4 py-3 active:bg-foreground/[0.06]">
+        {icon}
+        <span className="min-w-0 flex-1">
+          {label && <span className="block text-xs font-semibold tracking-wide text-muted-foreground uppercase">{label}</span>}
+          <span className="block">{place.name}</span>
+          {place.address && <span className="block text-muted-foreground">{place.address}</span>}
+          {place.localName && place.localName !== place.name && (
+            <span className="block text-muted-foreground" lang="zh-CN">
+              {place.localName}
+            </span>
+          )}
+        </span>
+        <ExternalLink className="size-4 shrink-0 text-primary" aria-label="Open in Google Maps" />
+      </a>
+    </li>
+  )
+}

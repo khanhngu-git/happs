@@ -76,6 +76,7 @@ export function ItemFormDialog({
   // A new plan gets its id up front, so it never "overlaps itself" once saved while the sheet closes.
   const [itemId] = useState(() => item?.id ?? newItemId(trip.id))
   const [location, setLocation] = useState<Location | null>(item?.location ?? pre?.location ?? null)
+  const [toLocation, setToLocation] = useState<Location | null>(item?.toLocation ?? null)
   const [hasCost, setHasCost] = useState(!!linkedExpense || !!pre?.cost)
   const [draft, setDraft] = useState<CostDraft>(() =>
     linkedExpense ? draftFromCost(linkedExpense) : pre?.cost ? draftFromCost(pre.cost) : emptyDraft({ currency: trip.baseCurrency, paidBy: me, memberIds: members.map((m) => m.id) }),
@@ -138,6 +139,7 @@ export function ItemFormDialog({
       bookingRef: item?.bookingRef ?? '',
     })
     setLocation(item?.location ?? pre?.location ?? null)
+    setToLocation(item?.toLocation ?? null)
     setHasCost(!!linkedExpense || !!pre?.cost)
     setDraft(linkedExpense ? draftFromCost(linkedExpense) : pre?.cost ? draftFromCost(pre.cost) : emptyDraft({ currency: trip.baseCurrency, paidBy: me, memberIds: members.map((m) => m.id) }))
     setCostError(null)
@@ -181,6 +183,7 @@ export function ItemFormDialog({
           checkIn: stay ? { date: v.date, time: v.startTime || null } : null,
           checkOut: stay ? { date: v.checkOutDate, time: v.checkOutTime || null } : null,
           location,
+          toLocation: v.type === 'transport' ? toLocation : null,
           notes: v.notes,
           bookingUrl: v.bookingUrl,
           bookingRef: v.bookingRef,
@@ -328,7 +331,17 @@ export function ItemFormDialog({
             </div>
           )}
 
-          <PlacePicker id="item-place" value={location} onChange={setLocation} bias={bias} localLanguage={isMainlandChina(trip.timeZone) ? 'zh-CN' : null} />
+          <PlacePicker
+            id="item-place"
+            label={type === 'transport' ? 'From' : 'Location'}
+            value={location}
+            onChange={setLocation}
+            bias={bias}
+            localLanguage={isMainlandChina(trip.timeZone) ? 'zh-CN' : null}
+          />
+          {type === 'transport' && (
+            <PlacePicker id="item-place-to" label="To" value={toLocation} onChange={setToLocation} bias={bias} localLanguage={isMainlandChina(trip.timeZone) ? 'zh-CN' : null} />
+          )}
 
           {more ? (
             <>
