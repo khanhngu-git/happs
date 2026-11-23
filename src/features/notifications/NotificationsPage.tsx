@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { limit, orderBy, query, updateDoc, writeBatch, doc } from 'firebase/firestore'
+import { toast } from 'sonner'
+import { getDocs, limit, orderBy, query, updateDoc, writeBatch, doc } from 'firebase/firestore'
 import { BellOff, CheckCheck, CircleAlert, CircleCheck, Clock, Send, UserPlus, CalendarDays, Receipt, Trash2, Plane } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useUser } from '@/features/auth/AuthProvider'
@@ -52,6 +55,17 @@ export function NotificationsPage() {
     await b.commit()
   }
 
+  /** Delete every notification (not just the ones on screen), 450 per batch. */
+  async function clearAll() {
+    const all = await getDocs(refs.notifications(user.uid))
+    for (let i = 0; i < all.docs.length; i += 450) {
+      const b = writeBatch(db)
+      all.docs.slice(i, i + 450).forEach((d) => b.delete(d.ref))
+      await b.commit()
+    }
+  }
+  const [clearing, setClearing] = useState(false)
+
   return (
     <>
       <PageHeader
@@ -59,10 +73,17 @@ export function NotificationsPage() {
         title={<h1 className="large-title">Notifications</h1>}
         backLabel="Trips"
         actions={
-          unread.length > 0 && (
-            <button type="button" onClick={markAll} className="inline-flex h-11 items-center gap-1.5 px-2 text-[1.0625rem] text-primary active:opacity-60">
-              <CheckCheck className="size-5" aria-hidden /> Read all
-            </button>
+          all.length > 0 && (
+            <div className="flex items-center">
+              {unread.length > 0 && (
+                <button type="button" onClick={markAll} aria-label="Mark all as read" title="Mark all as read" className="inline-flex size-11 items-center justify-center rounded-full text-primary active:opacity-60">
+                  <CheckCheck className="size-[1.375rem]" aria-hidden />
+                </button>
+              )}
+              <button type="button" onClick={() => setClearing(true)} aria-label="Clear all notifications" title="Clear all" className="inline-flex size-11 items-center justify-center rounded-full text-destructive active:opacity-60">
+                <Trash2 className="size-[1.375rem]" aria-hidden />
+              </button>
+            </div>
           )
         }
       />
@@ -101,6 +122,23 @@ export function NotificationsPage() {
           )}
         </div>
       </main>
+      <ConfirmDialog
+        open={clearing}
+        onOpenChange={setClearing}
+        title="Clear all notifications?"
+        description="This deletes every notification for you. It can’t be undone."
+        confirmLabel="Clear all"
+        destructive
+        onConfirm={async () => {
+          try {
+            await clearAll()
+            toast.success('Notifications cleared')
+          } catch (err) {
+            console.error(err)
+            toast.error('Couldn’t clear notifications')
+          }
+        }}
+      />
     </>
   )
 }
