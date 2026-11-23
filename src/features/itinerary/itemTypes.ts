@@ -1,4 +1,4 @@
-import { BedDouble, Bus, Camera, Sparkles, Utensils, type LucideIcon } from 'lucide-react'
+import { BedDouble, Bus, Camera, CarFront, Plane, Ship, Sparkles, TrainFront, Utensils, type LucideIcon } from 'lucide-react'
 import type { ItemType } from '@/shared/itinerary'
 
 /**
@@ -13,3 +13,18 @@ export const ITEM_TYPE_META: Record<ItemType, { label: string; icon: LucideIcon;
   other: { label: 'Other', icon: Sparkles, color: 'text-slate-600 dark:text-slate-300', chip: 'bg-slate-500/14', hex: '#475569' },
 }
 
+
+/**
+ * The icon for one plan. Transport plans show how you travel, worked out from
+ * the title: a car for taxis and rideshares (even to the airport), a plane for
+ * flights, a train for trains, a boat for ferries; anything else keeps the bus.
+ */
+export function iconFor(item: { type: ItemType; title?: string }): LucideIcon {
+  if (item.type !== 'transport' || !item.title) return ITEM_TYPE_META[item.type].icon
+  const t = item.title
+  if (/\b(taxi|didi|uber|car|cab|drive|rideshare)\b/i.test(t)) return CarFront
+  if (/\b(flights?|fly|airlines?|airport|plane)\b|✈/i.test(t)) return Plane
+  if (/\b(trains?|rail(way)?|metro|subway|maglev|bullet|tram|hsr)\b|\b[GDCZTK]\d{1,5}\b/i.test(t)) return TrainFront
+  if (/\b(ferry|boat|cruise|ship)\b/i.test(t)) return Ship
+  return ITEM_TYPE_META.transport.icon
+}

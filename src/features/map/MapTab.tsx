@@ -94,7 +94,7 @@ export function MapTab() {
         <li key={s.item.id}>
           <button type="button" onClick={() => set('item', s.item.id)} className={cn('flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left', s.item.id === selectedId && 'bg-primary/8')}>
             <span className="w-6 text-center text-sm font-bold text-muted-foreground">{s.number ?? ''}</span>
-            <ItemTypeIcon type={s.item.type} className="size-9" />
+            <ItemTypeIcon type={s.item.type} title={s.item.title} className="size-9" />
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium">{s.item.title}</span>
               <span className="block truncate text-sm text-muted-foreground">
@@ -120,7 +120,7 @@ export function MapTab() {
           <ul className="mt-4 divide-y divide-border/70 overflow-hidden rounded-[1.25rem] bg-card ring-1 ring-border/70">
             {unpinned.map((it) => (
               <li key={it.id} className="flex min-h-14 items-center gap-3 px-3 py-2">
-                <ItemTypeIcon type={it.type} className="size-9" />
+                <ItemTypeIcon type={it.type} title={it.title} className="size-9" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{it.title}</span>
                   <span className="block truncate text-sm text-muted-foreground">

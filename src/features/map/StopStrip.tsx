@@ -1,11 +1,11 @@
-import { ITEM_TYPE_META } from '@/features/itinerary/itemTypes'
+import { createElement } from 'react'
+import { ITEM_TYPE_META, iconFor } from '@/features/itinerary/itemTypes'
 import { timeLabel } from '@/features/itinerary/format'
 import type { MapStop } from './mapData'
 import type { ItemType } from '@/shared/itinerary'
 
-function Icon({ type }: { type: ItemType }) {
-  const I = ITEM_TYPE_META[type].icon
-  return <I className="size-4" aria-hidden />
+function Icon({ type, title }: { type: ItemType; title: string }) {
+  return createElement(iconFor({ type, title }), { className: 'size-4', 'aria-hidden': true })
 }
 
 /**
@@ -34,7 +34,7 @@ export function StopStrip({ stops, onSelect }: { stops: MapStop[]; onSelect(id: 
               </span>
             ) : (
               <span className="flex size-9 shrink-0 items-center justify-center rounded-full border-[3px] border-white text-[0.9375rem] font-extrabold text-white shadow" style={{ background: ITEM_TYPE_META[s.item.type].hex }} aria-hidden>
-                {s.number ?? <Icon type={s.item.type} />}
+                {s.number ?? <Icon type={s.item.type} title={s.item.title} />}
               </span>
             )}
             <span className="min-w-0">

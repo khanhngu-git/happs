@@ -24,7 +24,7 @@ export function NowNextCard({ items, day, onOpen }: { items: Item[]; day: string
     <section aria-label="Now and next" className="rounded-2xl bg-primary/8 p-4 ring-1 ring-primary/20">
       {now && (
         <button type="button" onClick={() => onOpen(now)} className="flex w-full items-center gap-3 text-left">
-          <ItemTypeIcon type={now.type} className="size-9" />
+          <ItemTypeIcon type={now.type} title={now.title} className="size-9" />
           <span className="min-w-0 flex-1">
             <span className="block text-[0.8125rem] font-semibold text-primary uppercase">Now</span>
             <span className="block truncate text-[1.0625rem] font-medium">{now.title}</span>
@@ -34,7 +34,7 @@ export function NowNextCard({ items, day, onOpen }: { items: Item[]; day: string
       )}
       {next && (
         <button type="button" onClick={() => onOpen(next)} className={`flex w-full items-center gap-3 text-left ${now ? 'mt-3 border-t border-primary/15 pt-3' : ''}`}>
-          <ItemTypeIcon type={next.type} className="size-9" />
+          <ItemTypeIcon type={next.type} title={next.title} className="size-9" />
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-1 text-[0.8125rem] font-semibold text-primary uppercase">
               <Clock className="size-3.5" aria-hidden /> Next · {inMinutes(minutesToNext!)}

@@ -3,7 +3,7 @@ import { AdvancedMarker, Map, useMap } from '@vis.gl/react-google-maps'
 import { BedDouble, LocateFixed } from 'lucide-react'
 import { toast } from 'sonner'
 import { MAP_ID } from '@/lib/maps'
-import { ITEM_TYPE_META } from '@/features/itinerary/itemTypes'
+import { ITEM_TYPE_META, iconFor } from '@/features/itinerary/itemTypes'
 import type { MapStop } from './mapData'
 
 /** Fit the viewport to the visible markers whenever they change. */
@@ -106,7 +106,7 @@ export function TripMap({ stops, selectedId, onSelect }: { stops: MapStop[]; sel
       <Map mapId={MAP_ID} defaultCenter={center} defaultZoom={stops.length ? 12 : 2} disableDefaultUI gestureHandling="greedy" clickableIcons={false} onClick={() => onSelect(null)} colorScheme="FOLLOW_SYSTEM">
         {stops.map((s) => {
           const meta = ITEM_TYPE_META[s.item.type]
-          const Icon = meta.icon
+          const Icon = iconFor(s.item)
           const selected = s.item.id === selectedId
           const dimmed = !!selectedId && !selected
           const size = selected ? 46 : s.number !== null ? 36 : 32

@@ -101,7 +101,7 @@ function Row({ item, when, china }: { item: SharedItem; when: string; china: boo
   const loc = item.location
   return (
     <li className="flex items-center gap-3 px-4 py-2.5">
-      <ItemTypeIcon type={item.type} className="size-8" />
+      <ItemTypeIcon type={item.type} title={item.title} className="size-8" />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[1.0625rem]">{item.title}</span>
         <span className="block truncate text-[0.875rem] text-muted-foreground">

@@ -33,7 +33,7 @@ export const ActivityRow = forwardRef<HTMLLIElement, { item: Item; onOpen(): voi
           {item.photoURL ? (
             <img src={item.photoURL} alt="" loading="lazy" className="size-10 shrink-0 rounded-xl object-cover" />
           ) : (
-            <ItemTypeIcon type={item.type} className="size-8" />
+            <ItemTypeIcon type={item.type} title={item.title} className="size-8" />
           )}
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[1.0625rem]">{item.title}</span>
