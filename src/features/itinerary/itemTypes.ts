@@ -14,17 +14,25 @@ export const ITEM_TYPE_META: Record<ItemType, { label: string; icon: LucideIcon;
 }
 
 
+export type TransportMode = 'car' | 'flight' | 'train' | 'boat' | 'bus'
+
 /**
- * The icon for one plan. Transport plans show how you travel, worked out from
- * the title: a car for taxis and rideshares (even to the airport), a plane for
- * flights, a train for trains, a boat for ferries; anything else keeps the bus.
+ * How a transport plan travels, worked out from its title: taxis and
+ * rideshares first (even "DiDi to the airport" is a car), then flights,
+ * trains (incl. Maglev and G/D-numbered trains), boats; anything else is a bus.
  */
+export function transportMode(title: string): TransportMode {
+  if (/\b(taxi|didi|uber|car|cab|drive|rideshare)\b/i.test(title)) return 'car'
+  if (/\b(flights?|fly|airlines?|airport|plane)\b|✈/i.test(title)) return 'flight'
+  if (/\b(trains?|rail(way)?|metro|subway|maglev|bullet|tram|hsr)\b|\b[GDCZTK]\d{1,5}\b/i.test(title)) return 'train'
+  if (/\b(ferry|boat|cruise|ship)\b/i.test(title)) return 'boat'
+  return 'bus'
+}
+
+const MODE_ICON: Record<TransportMode, LucideIcon> = { car: CarFront, flight: Plane, train: TrainFront, boat: Ship, bus: Bus }
+
+/** The icon for one plan: transport plans show how they travel. */
 export function iconFor(item: { type: ItemType; title?: string }): LucideIcon {
   if (item.type !== 'transport' || !item.title) return ITEM_TYPE_META[item.type].icon
-  const t = item.title
-  if (/\b(taxi|didi|uber|car|cab|drive|rideshare)\b/i.test(t)) return CarFront
-  if (/\b(flights?|fly|airlines?|airport|plane)\b|✈/i.test(t)) return Plane
-  if (/\b(trains?|rail(way)?|metro|subway|maglev|bullet|tram|hsr)\b|\b[GDCZTK]\d{1,5}\b/i.test(t)) return TrainFront
-  if (/\b(ferry|boat|cruise|ship)\b/i.test(t)) return Ship
-  return ITEM_TYPE_META.transport.icon
+  return MODE_ICON[transportMode(item.title)]
 }

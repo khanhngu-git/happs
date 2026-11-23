@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router'
-import { CalendarDays, X } from 'lucide-react'
+import { ArrowRight, CalendarDays, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTrip } from '@/features/trips/TripContext'
 import { formatShortDate } from '@/shared/dates'
@@ -31,7 +31,15 @@ export function StopCard({ stop, onClose }: { stop: MapStop; onClose(): void }) 
               {item.location.localName}
             </p>
           )}
-          {item.location?.address && <p className="truncate text-sm">{item.location.address}</p>}
+          {stop.to ? (
+            <p className="mt-0.5 flex items-center gap-1.5 text-sm font-medium">
+              <span className="truncate">{item.location?.name}</span>
+              <ArrowRight className="size-3.5 shrink-0" aria-label="to" />
+              <span className="truncate">{stop.to.name}</span>
+            </p>
+          ) : (
+            item.location?.address && <p className="truncate text-sm">{item.location.address}</p>
+          )}
         </div>
         <button type="button" onClick={onClose} className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-foreground/8" aria-label="Close">
           <X className="size-4" />

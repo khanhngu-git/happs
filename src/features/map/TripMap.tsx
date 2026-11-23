@@ -1,27 +1,37 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AdvancedMarker, Map, useMap } from '@vis.gl/react-google-maps'
-import { BedDouble, LocateFixed } from 'lucide-react'
+import { BedDouble, Flag, LocateFixed, Scan } from 'lucide-react'
 import { toast } from 'sonner'
 import { MAP_ID } from '@/lib/maps'
 import { ITEM_TYPE_META, iconFor } from '@/features/itinerary/itemTypes'
-import type { MapStop } from './mapData'
+import { arcPath, type MapStop } from './mapData'
 
 /** Fit the viewport to the visible markers whenever they change. */
-function FitBounds({ stops }: { stops: MapStop[] }) {
+/** Every point that should be in view: each stop, and where each journey ends. */
+function points(stops: MapStop[]) {
+  return stops.flatMap((s) => [{ lat: s.lat, lng: s.lng }, ...(s.to ? [{ lat: s.to.lat, lng: s.to.lng }] : [])])
+}
+
+function fitTo(map: google.maps.Map, stops: MapStop[]) {
+  const pts = points(stops)
+  if (pts.length === 0) return
+  if (pts.length === 1) {
+    map.panTo(pts[0]!)
+    map.setZoom(15)
+    return
+  }
+  const b = new google.maps.LatLngBounds()
+  pts.forEach((p) => b.extend(p))
+  map.fitBounds(b, { top: 130, bottom: 230, left: 48, right: 48 })
+}
+
+function FitBounds({ stops, skip }: { stops: MapStop[]; skip: boolean }) {
   const map = useMap()
-  const key = stops.map((s) => s.item.id).join()
+  const key = stops.map((s) => `${s.item.id}${s.to ? '>' : ''}`).join()
   useEffect(() => {
-    if (!map || stops.length === 0) return
-    const fit = () => {
-      if (stops.length === 1) {
-        map.panTo({ lat: stops[0]!.lat, lng: stops[0]!.lng })
-        map.setZoom(15)
-        return
-      }
-      const b = new google.maps.LatLngBounds()
-      stops.forEach((s) => b.extend({ lat: s.lat, lng: s.lng }))
-      map.fitBounds(b, { top: 130, bottom: 230, left: 48, right: 48 })
-    }
+    // A selected stop frames itself (PanToSelected); don't zoom out over it.
+    if (!map || stops.length === 0 || skip) return
+    const fit = () => fitTo(map, stops)
     fit()
     // The first fit can run before the map has its final size; fit again once it settles.
     const once = google.maps.event.addListenerOnce(map, 'idle', fit)
@@ -41,24 +51,75 @@ const ROUTE = '#0f766e'
 function DayLine({ stops }: { stops: MapStop[] }) {
   const map = useMap()
   useEffect(() => {
-    const path = stops.filter((s) => s.number !== null).map((s) => ({ lat: s.lat, lng: s.lng }))
-    if (!map || path.length < 2) return
-    const casing = new google.maps.Polyline({ map, path, strokeColor: '#ffffff', strokeOpacity: 0.9, strokeWeight: 6, zIndex: 1, clickable: false })
-    const line = new google.maps.Polyline({
-      map,
-      path,
-      strokeColor: ROUTE,
-      strokeOpacity: 0.9,
-      strokeWeight: 3,
-      zIndex: 2,
-      clickable: false,
-    })
-    return () => {
-      casing.setMap(null)
-      line.setMap(null)
+    if (!map) return
+    // Join each stop to the next. A journey is drawn by Journeys, so the leg
+    // after it starts where it arrives, not where it left.
+    const timed = stops.filter((s) => s.number !== null)
+    const legs: google.maps.LatLngLiteral[][] = []
+    for (let i = 1; i < timed.length; i++) {
+      const prev = timed[i - 1]!
+      const from = prev.to ? { lat: prev.to.lat, lng: prev.to.lng } : { lat: prev.lat, lng: prev.lng }
+      const to = { lat: timed[i]!.lat, lng: timed[i]!.lng }
+      if (from.lat !== to.lat || from.lng !== to.lng) legs.push([from, to])
     }
+    const lines = legs.flatMap((path) => [
+      new google.maps.Polyline({ map, path, strokeColor: '#ffffff', strokeOpacity: 0.9, strokeWeight: 6, zIndex: 1, clickable: false }),
+      new google.maps.Polyline({ map, path, strokeColor: ROUTE, strokeOpacity: 0.9, strokeWeight: 3, zIndex: 2, clickable: false }),
+    ])
+    return () => lines.forEach((l) => l.setMap(null))
   }, [map, stops])
   return null
+}
+
+const TRANSPORT = ITEM_TYPE_META.transport.hex
+
+/**
+ * Journeys, drawn the way maps usually draw them: flights as a curved arc,
+ * trains as a dashed line, cars, buses and boats as a dotted line. Each has
+ * a white casing so it reads on any map style.
+ */
+function Journeys({ stops, selectedId }: { stops: MapStop[]; selectedId: string | null }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!map) return
+    const lines: google.maps.Polyline[] = []
+    for (const s of stops) {
+      if (!s.to) continue
+      const from = { lat: s.lat, lng: s.lng }
+      const to = { lat: s.to.lat, lng: s.to.lng }
+      const path = s.mode === 'flight' ? arcPath(from, to) : [from, to]
+      const dim = !!selectedId && selectedId !== s.item.id
+      const opacity = dim ? 0.35 : 0.95
+      const dash = s.mode === 'train' ? { path: 'M 0,-1 0,1', scale: 3, len: '14px' } : s.mode === 'flight' ? null : { path: google.maps.SymbolPath.CIRCLE, scale: 2, len: '9px' }
+      lines.push(new google.maps.Polyline({ map, path, strokeColor: '#ffffff', strokeOpacity: dash ? 0 : 0.9, strokeWeight: 7, zIndex: 3, clickable: false, geodesic: false }))
+      lines.push(
+        new google.maps.Polyline({
+          map,
+          path,
+          zIndex: 4,
+          clickable: false,
+          strokeColor: TRANSPORT,
+          strokeWeight: 3,
+          strokeOpacity: dash ? 0 : opacity,
+          icons: dash
+            ? [{ icon: { path: dash.path, strokeColor: TRANSPORT, strokeOpacity: opacity, fillColor: TRANSPORT, fillOpacity: opacity, scale: dash.scale, strokeWeight: 3 }, offset: '0', repeat: dash.len }]
+            : undefined,
+        }),
+      )
+    }
+    return () => lines.forEach((l) => l.setMap(null))
+  }, [map, stops, selectedId])
+  return null
+}
+
+/** Zoom back out to everything on the map after panning around. */
+function ShowAll({ stops }: { stops: MapStop[] }) {
+  const map = useMap()
+  return (
+    <button type="button" aria-label="Show everything on the map" className="glass pointer-events-auto inline-flex size-12 items-center justify-center rounded-full" onClick={() => map && fitTo(map, stops)}>
+      <Scan className="size-5" />
+    </button>
+  )
 }
 
 /** Keep the selected stop in view. */
@@ -66,9 +127,23 @@ function PanToSelected({ stop }: { stop: MapStop | null }) {
   const map = useMap()
   useEffect(() => {
     if (!map || !stop) return
-    map.panTo({ lat: stop.lat, lng: stop.lng })
-    // Close stops overlap when zoomed out; zoom in so the chosen one is clear.
-    if ((map.getZoom() ?? 0) < 15) map.setZoom(15)
+    const frame = () => {
+      // A journey: show both ends, leaving room for the card at the bottom.
+      if (stop.to) {
+        const b = new google.maps.LatLngBounds()
+        b.extend({ lat: stop.lat, lng: stop.lng })
+        b.extend({ lat: stop.to.lat, lng: stop.to.lng })
+        map.fitBounds(b, { top: 150, bottom: 340, left: 56, right: 56 })
+        return
+      }
+      map.panTo({ lat: stop.lat, lng: stop.lng })
+      // Close stops overlap when zoomed out; zoom in so the chosen one is clear.
+      if ((map.getZoom() ?? 0) < 15) map.setZoom(15)
+    }
+    frame()
+    // On a fresh load the map may not have its final size yet; frame again once it settles.
+    const once = google.maps.event.addListenerOnce(map, 'idle', frame)
+    return () => once.remove()
   }, [map, stop])
   return null
 }
@@ -151,16 +226,37 @@ export function TripMap({ stops, selectedId, onSelect }: { stops: MapStop[]; sel
             </AdvancedMarker>
           )
         })}
+        {stops.map((s) =>
+          s.to ? (
+            <AdvancedMarker
+              key={`${s.item.id}-to`}
+              position={{ lat: s.to.lat, lng: s.to.lng }}
+              title={`${s.item.title}: arrives at ${s.to.name}`}
+              onClick={() => onSelect(s.item.id)}
+              zIndex={s.item.id === selectedId ? 999 : 9}
+            >
+              <div
+                className="flex size-7 items-center justify-center rounded-full border-[3px] bg-white shadow-[0_2px_6px_rgb(0_0_0/0.3)] transition-opacity"
+                style={{ borderColor: TRANSPORT, color: TRANSPORT, opacity: selectedId && selectedId !== s.item.id ? 0.45 : 1 }}
+                aria-hidden
+              >
+                <Flag className="size-3.5" />
+              </div>
+            </AdvancedMarker>
+          ) : null,
+        )}
+        <Journeys stops={stops} selectedId={selectedId} />
         {me && (
           <AdvancedMarker position={me} title="You are here">
             <span className="block size-4 rounded-full border-2 border-white bg-sky-500 shadow-[0_0_0_6px_rgb(14_165_233/0.25)]" />
           </AdvancedMarker>
         )}
-        <FitBounds stops={stops} />
+        <FitBounds stops={stops} skip={!!selectedId} />
         <DayLine stops={stops} />
         <PanToSelected stop={stops.find((s) => s.item.id === selectedId) ?? null} />
       </Map>
-      <div className="pointer-events-none absolute right-3 bottom-[calc(13rem+env(safe-area-inset-bottom))] md:bottom-4">
+      <div className="pointer-events-none absolute right-3 bottom-[calc(13rem+env(safe-area-inset-bottom))] flex flex-col gap-2 md:bottom-4">
+        {stops.length > 0 && <ShowAll stops={stops} />}
         <LocateMe onLocated={setMe} />
       </div>
     </div>

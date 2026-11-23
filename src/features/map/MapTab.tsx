@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router'
 import { MapPinned, MapPinPlus } from 'lucide-react'
 import { EmptyState } from '@/components/EmptyState'
@@ -11,7 +11,7 @@ import { timeLabel } from '@/features/itinerary/format'
 import { useItineraryDialogs } from '@/features/itinerary/ItineraryDialogs'
 import { hasMaps } from '@/lib/maps'
 import { cn } from '@/lib/utils'
-import { formatShortDate, tripDays } from '@/shared/dates'
+import { formatShortDate, todayInZone, tripDays } from '@/shared/dates'
 import { ITEM_TYPES, type ItemType } from '@/shared/itinerary'
 import { mapStops } from './mapData'
 import { StopCard } from './StopCard'
@@ -40,7 +40,15 @@ export function MapTab() {
   const { data: items, loading } = useItems(trip.id)
   const { dialogs, editItem } = useItineraryDialogs(items)
   const days = useMemo(() => tripDays(trip.startDate, trip.endDate), [trip.startDate, trip.endDate])
-  const day = days.includes(params.get('day') ?? '') ? params.get('day') : null
+  // During the trip the map opens on today; "All days" is an explicit choice.
+  const today = todayInZone(trip.timeZone)
+  const dayParam = params.get('day')
+  const day = dayParam === 'all' ? null : days.includes(dayParam ?? '') ? dayParam : days.includes(today) ? today : null
+  const dayBar = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    // Keep the chosen day's chip in view in the scrolling row.
+    dayBar.current?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' })
+  }, [day])
   // One type at a time (or all), like the day filter.
   const typeParam = params.get('type') as ItemType | null
   const type = typeParam && ITEM_TYPES.includes(typeParam) ? typeParam : null
@@ -62,13 +70,13 @@ export function MapTab() {
 
   const filters = (
     <div className="glass pointer-events-auto space-y-1 rounded-[1.5rem] p-1.5">
-      <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]" role="group" aria-label="Day">
-        <Chip on={!day} onClick={() => set('day', null)}>
+      <div ref={dayBar} className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]" role="group" aria-label="Day">
+        <Chip on={!day} onClick={() => set('day', 'all')}>
           All days
         </Chip>
         {days.map((d, i) => (
-          <Chip key={d} on={day === d} onClick={() => set('day', d)} label={`Day ${i + 1}, ${formatShortDate(d)}`}>
-            Day {i + 1}
+          <Chip key={d} on={day === d} onClick={() => set('day', d)} label={`Day ${i + 1}, ${formatShortDate(d)}${d === today ? ', today' : ''}`}>
+            {d === today ? 'Today' : `Day ${i + 1}`}
           </Chip>
         ))}
       </div>

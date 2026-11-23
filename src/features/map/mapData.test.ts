@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mapStops } from './mapData'
+import { arcPath, mapStops } from './mapData'
 import type { Item } from '@/lib/firestore'
 import type { ItemType } from '@/shared/itinerary'
 
@@ -50,5 +50,23 @@ describe('mapStops', () => {
     const stops = mapStops([item('a', { type: 'food' }), item('b')], null, new Set<ItemType>(['food']))
     expect(stops).toHaveLength(1)
     expect(stops[0]!.number).toBeNull()
+  })
+})
+
+describe('arcPath', () => {
+  it('starts and ends on the two places and bows away from the straight line', () => {
+    const a = { lat: -37.67, lng: 144.84 } // Melbourne
+    const b = { lat: 19.93, lng: 110.46 } // Haikou
+    const p = arcPath(a, b)
+    expect(p[0]).toEqual(a)
+    expect(p.at(-1)!.lat).toBeCloseTo(b.lat)
+    expect(p.at(-1)!.lng).toBeCloseTo(b.lng)
+    const mid = p[Math.floor(p.length / 2)]!
+    const straight = { lat: (a.lat + b.lat) / 2, lng: (a.lng + b.lng) / 2 }
+    expect(Math.hypot(mid.lat - straight.lat, mid.lng - straight.lng)).toBeGreaterThan(5)
+  })
+  it('never goes the long way round the world', () => {
+    const p = arcPath({ lat: 35, lng: 170 }, { lat: 40, lng: -170 })
+    expect(Math.max(...p.map((x) => x.lng)) - Math.min(...p.map((x) => x.lng))).toBeLessThan(30)
   })
 })
