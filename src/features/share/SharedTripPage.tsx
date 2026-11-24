@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { FullScreenLoader } from '@/components/FullScreenLoader'
 import { ItemTypeIcon } from '@/features/itinerary/ItemTypeIcon'
 import { buildIcs, downloadIcs } from '@/features/itinerary/calendar'
+import { openAmapOnIOS } from '@/features/itinerary/openAmap'
 import { amapUrl, googleDirectionsUrl, isMainlandChina } from '@/features/itinerary/routes'
 import { loadSharedTrip } from './shareApi'
 import { formatDateRange, formatLongDate, formatTime, tripDays } from '@/shared/dates'
@@ -114,6 +115,7 @@ function Row({ item, when, china }: { item: SharedItem; when: string; china: boo
           href={china ? amapUrl(loc) : googleDirectionsUrl(loc)}
           target="_blank"
           rel="noreferrer"
+          onClick={china ? (e) => openAmapOnIOS(e, loc) : undefined}
           className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
           aria-label={`Directions to ${item.title}`}
         >

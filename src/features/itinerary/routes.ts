@@ -7,6 +7,10 @@
  * returns GCJ-02 coordinates (the same datum as Google's own China map), which
  * is what Amap calls `gaode`, so no conversion is needed.
  *
+ * On iOS the uri.amap.com page can't open the app (Safari blocks its
+ * redirect), so iPhones go straight to Amap's `iosamap://` scheme and only
+ * fall back to that page when Amap isn't installed.
+ *
  * DiDi has no public link that pre-fills a destination, so the taxi option
  * shows the address in Chinese to copy or show the driver, then opens DiDi.
  */
@@ -49,8 +53,35 @@ export function amapUrl(to: Loc, from?: Loc | null): string {
   return `https://uri.amap.com/navigation?${p}`
 }
 
+/**
+ * Amap's own iOS scheme: route planning (driving) from `from`, or the current
+ * position, to `to`; a place search without coordinates. `dev=0` says the
+ * coordinates are already GCJ-02.
+ */
+export function amapIosUrl(to: Loc, from?: Loc | null): string {
+  const name = (l: Loc) => l.localName || l.name
+  if (!hasCoords(to)) {
+    const p = new URLSearchParams({ sourceApplication: 'happs', name: to.localName || to.localAddress || to.name, dev: '0' })
+    return `iosamap://poi?${p}`
+  }
+  const p = new URLSearchParams({ sourceApplication: 'happs' })
+  if (hasCoords(from)) {
+    p.set('slat', String(from.lat))
+    p.set('slon', String(from.lng))
+    p.set('sname', name(from))
+  }
+  p.set('dlat', String(to.lat))
+  p.set('dlon', String(to.lng))
+  p.set('dname', name(to))
+  p.set('dev', '0')
+  p.set('t', '0')
+  return `iosamap://path?${p}`
+}
+
 /** Opens the DiDi app (DiDi's URL scheme; it can't pre-fill the destination). */
 export const DIDI_APP_URL = 'diditaxi://'
+/** DiDi (滴滴出行) on the App Store, for when the app isn't installed. */
+export const DIDI_APP_STORE_URL = 'https://apps.apple.com/app/id554499054'
 
 /** What to show a driver: the local-language name and address when we have them. */
 export function driverText(loc: Loc): { name: string; address: string } {

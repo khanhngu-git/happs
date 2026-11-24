@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Share, SquarePlus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { isStandalone } from '@/features/auth/authApi'
+import { isIOS } from '@/lib/openApp'
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>
@@ -16,8 +17,6 @@ if (typeof window !== 'undefined') {
     deferred = e as BeforeInstallPromptEvent
   })
 }
-
-const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 
 function readDismissed(): boolean {
   try {

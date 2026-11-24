@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { amapUrl, driverText, googleDirectionsUrl, isMainlandChina } from './routes'
+import { amapIosUrl, amapUrl, driverText, googleDirectionsUrl, isMainlandChina } from './routes'
 
 const bund = { placeId: 'p1', name: 'The Bund', address: 'Zhongshan East 1st Rd, Shanghai, China', lat: 31.24, lng: 121.49, localName: '外滩', localAddress: '中国上海市中山东一路' }
 const hotel = { placeId: 'p2', name: 'Peace Hotel', address: 'Shanghai, China', lat: 31.241, lng: 121.488 }
@@ -34,6 +34,18 @@ describe('route links', () => {
   it('Amap falls back to a search without coordinates, and starts from your position without an origin', () => {
     expect(amapUrl({ ...hotel, lat: null, lng: null })).toMatch(/^https:\/\/uri\.amap\.com\/search\?keyword=Peace\+Hotel/)
     expect(new URL(amapUrl(bund)).searchParams.has('from')).toBe(false)
+  })
+
+  it('Amap on iOS uses the iosamap scheme with GCJ-02 coordinates', () => {
+    const u = new URL(amapIosUrl(bund, hotel))
+    expect(u.protocol + u.host).toBe('iosamap:path')
+    expect(u.searchParams.get('dlat')).toBe('31.24')
+    expect(u.searchParams.get('dlon')).toBe('121.49')
+    expect(u.searchParams.get('dname')).toBe('外滩')
+    expect(u.searchParams.get('slat')).toBe('31.241')
+    expect(u.searchParams.get('dev')).toBe('0')
+    expect(new URL(amapIosUrl(bund)).searchParams.has('slat')).toBe(false)
+    expect(amapIosUrl({ ...hotel, lat: null, lng: null })).toMatch(/^iosamap:\/\/poi\?.*name=Peace\+Hotel/)
   })
 
   it('shows the driver the Chinese name and address when we have them', () => {
