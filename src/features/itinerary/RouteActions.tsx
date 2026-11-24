@@ -4,11 +4,10 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useTrip } from '@/features/trips/TripContext'
-import { isIOS, openApp } from '@/lib/openApp'
 import { cn } from '@/lib/utils'
 import type { Location } from '@/shared/schemas'
 import { openAmapOnIOS } from './openAmap'
-import { amapUrl, DIDI_APP_STORE_URL, DIDI_APP_URL, driverText, googleDirectionsUrl, isMainlandChina } from './routes'
+import { amapUrl, DIDI_APP_URL, driverText, googleDirectionsUrl, isMainlandChina } from './routes'
 
 /**
  * "How do I get there?" in one tap: Google Maps everywhere, plus Amap and a
@@ -74,14 +73,9 @@ function DriverCard({ open, onOpenChange, to }: { open: boolean; onOpenChange(o:
         <Button asChild>
           <a
             href={DIDI_APP_URL}
-            onClick={(e) => {
+            onClick={() => {
               // Copy first so the destination is ready to paste once DiDi opens.
               void navigator.clipboard?.writeText(text).catch(() => {})
-              // iOS fails silently on a scheme nothing handles; send them to the App Store instead.
-              if (isIOS()) {
-                e.preventDefault()
-                openApp(DIDI_APP_URL, DIDI_APP_STORE_URL)
-              }
             }}
           >
             <CarTaxiFront /> Copy and open DiDi

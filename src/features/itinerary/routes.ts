@@ -78,10 +78,14 @@ export function amapIosUrl(to: Loc, from?: Loc | null): string {
   return `iosamap://path?${p}`
 }
 
-/** Opens the DiDi app (DiDi's URL scheme; it can't pre-fill the destination). */
-export const DIDI_APP_URL = 'diditaxi://'
-/** DiDi (滴滴出行) on the App Store, for when the app isn't installed. */
-export const DIDI_APP_STORE_URL = 'https://apps.apple.com/app/id554499054'
+/**
+ * Opens the DiDi (滴滴出行) app. This is a universal link DiDi's app claims
+ * (page.udache.com's apple-app-site-association lists /dpub-template/download-app/*),
+ * so iOS opens the app when it's installed and DiDi's download page when it
+ * isn't. The bare `diditaxi://` scheme isn't registered by current versions,
+ * and Safari shows "the address is invalid". It can't pre-fill the destination.
+ */
+export const DIDI_APP_URL = 'https://page.udache.com/dpub-template/download-app/index.html'
 
 /** What to show a driver: the local-language name and address when we have them. */
 export function driverText(loc: Loc): { name: string; address: string } {
