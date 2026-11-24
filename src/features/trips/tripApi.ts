@@ -49,6 +49,8 @@ export async function removeMember(tripId: string, uid: string) {
   const batch = writeBatch(db)
   batch.update(doc(db, 'trips', tripId), { memberIds: arrayRemove(uid), updatedAt: serverTimestamp() })
   batch.delete(doc(db, 'trips', tripId, 'members', uid))
+  // Their live location goes with them.
+  batch.delete(doc(db, 'trips', tripId, 'locations', uid))
   await batch.commit()
 }
 
@@ -82,7 +84,7 @@ export async function deleteTrip(trip: Trip, uid: string, ownerName: string) {
     const shares = await getDocs(collection(e.ref, 'shares'))
     await deleteAll([...shares.docs.map((d) => d.ref), e.ref])
   }
-  const rest = await Promise.all(['items', 'ideas', 'files', 'settlementBatches'].map((n) => getDocs(t(n))))
+  const rest = await Promise.all(['items', 'ideas', 'files', 'settlementBatches', 'locations'].map((n) => getDocs(t(n))))
   await deleteAll(rest.flatMap((snap) => snap.docs.map((d) => d.ref)))
   const invites = await getDocs(query(collection(db, 'invites'), where('tripId', '==', trip.id)))
   await deleteAll(invites.docs.map((d) => d.ref))

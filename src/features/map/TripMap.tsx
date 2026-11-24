@@ -4,6 +4,10 @@ import { BedDouble, Flag, LocateFixed, Scan } from 'lucide-react'
 import { toast } from 'sonner'
 import { MAP_ID } from '@/lib/maps'
 import { ITEM_TYPE_META, iconFor } from '@/features/itinerary/itemTypes'
+import { UserAvatar } from '@/components/UserAvatar'
+import { LiveLocationButton } from '@/features/location/LiveLocationControls'
+import { useLiveLocation, type Person } from '@/features/location/LiveLocationProvider'
+import { ageLabel } from '@/features/location/liveLocation'
 import { arcPath, type MapStop } from './mapData'
 
 /** Fit the viewport to the visible markers whenever they change. */
@@ -148,14 +152,55 @@ function PanToSelected({ stop }: { stop: MapStop | null }) {
   return null
 }
 
-function LocateMe({ onLocated }: { onLocated(p: google.maps.LatLngLiteral): void }) {
+/** Centre on a member who's sharing their location (from "Sharing live location" in Members). */
+function PanToPerson({ person }: { person: Person | null }) {
+  const map = useMap()
+  const uid = person?.uid
+  useEffect(() => {
+    if (!map || !person) return
+    const frame = () => {
+      map.panTo({ lat: person.lat, lng: person.lng })
+      if ((map.getZoom() ?? 0) < 15) map.setZoom(15)
+    }
+    frame()
+    const once = google.maps.event.addListenerOnce(map, 'idle', frame)
+    return () => once.remove()
+    // Only when the person changes, not on each of their updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, uid])
+  return null
+}
+
+/** A member sharing their location: their photo, ringed, with their first name underneath. */
+function PersonPin({ person, now }: { person: Person; now: number }) {
+  const stale = person.freshness === 'stale'
+  return (
+    <AdvancedMarker position={{ lat: person.lat, lng: person.lng }} title={`${person.name} · ${ageLabel(person.updatedAt, now)}`} zIndex={2000}>
+      <div className="flex flex-col items-center transition-opacity" style={{ opacity: stale ? 0.55 : 1 }} aria-hidden>
+        <UserAvatar name={person.name} photoURL={person.photoURL} className={`size-10 border-[3px] shadow-[0_2px_8px_rgb(0_0_0/0.35)] ${stale ? 'border-zinc-300' : 'border-sky-500'}`} />
+        <span className="mt-0.5 max-w-24 truncate rounded-full bg-white px-1.5 text-[0.6875rem] font-semibold text-zinc-900 shadow-[0_1px_3px_rgb(0_0_0/0.3)]">
+          {person.name.split(' ')[0]}
+          {stale && ` · ${ageLabel(person.updatedAt, now)}`}
+        </span>
+      </div>
+    </AdvancedMarker>
+  )
+}
+
+function LocateMe({ onLocated, live }: { onLocated(p: google.maps.LatLngLiteral): void; live: google.maps.LatLngLiteral | null }) {
   const map = useMap()
   return (
     <button
       type="button"
       aria-label="Show my location"
       className="glass pointer-events-auto inline-flex size-12 items-center justify-center rounded-full"
-      onClick={() =>
+      onClick={() => {
+        // Already following the device while sharing: no need to ask again.
+        if (live) {
+          map?.panTo(live)
+          if ((map?.getZoom() ?? 0) < 15) map?.setZoom(15)
+          return
+        }
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             const p = { lat: pos.coords.latitude, lng: pos.coords.longitude }
@@ -166,16 +211,21 @@ function LocateMe({ onLocated }: { onLocated(p: google.maps.LatLngLiteral): void
           () => toast.error('Couldn’t get your location. Check location permissions.'),
           { enableHighAccuracy: true, timeout: 10_000 },
         )
-      }
+      }}
     >
       <LocateFixed className="size-5" />
     </button>
   )
 }
 
-export function TripMap({ stops, selectedId, onSelect }: { stops: MapStop[]; selectedId: string | null; onSelect(id: string | null): void }) {
-  const [me, setMe] = useState<google.maps.LatLngLiteral | null>(null)
-  const center = useMemo(() => (stops[0] ? { lat: stops[0].lat, lng: stops[0].lng } : { lat: 0, lng: 0 }), [stops])
+export function TripMap({ stops, selectedId, onSelect, personId }: { stops: MapStop[]; selectedId: string | null; onSelect(id: string | null): void; personId?: string | null }) {
+  const [located, setLocated] = useState<google.maps.LatLngLiteral | null>(null)
+  const live = useLiveLocation()
+  const liveMe = useMemo(() => (live.myFix ? { lat: live.myFix.lat, lng: live.myFix.lng } : null), [live.myFix])
+  const me = liveMe ?? located
+  const focus = live.people.find((p) => p.uid === personId) ?? null
+  const first = stops[0] ?? live.people[0]
+  const center = useMemo(() => (first ? { lat: first.lat, lng: first.lng } : { lat: 0, lng: 0 }), [first])
   return (
     <div className="relative size-full">
       <Map mapId={MAP_ID} defaultCenter={center} defaultZoom={stops.length ? 12 : 2} disableDefaultUI gestureHandling="greedy" clickableIcons={false} onClick={() => onSelect(null)} colorScheme="FOLLOW_SYSTEM">
@@ -246,18 +296,23 @@ export function TripMap({ stops, selectedId, onSelect }: { stops: MapStop[]; sel
           ) : null,
         )}
         <Journeys stops={stops} selectedId={selectedId} />
+        {live.people.map((p) => (
+          <PersonPin key={p.uid} person={p} now={live.now} />
+        ))}
         {me && (
-          <AdvancedMarker position={me} title="You are here">
+          <AdvancedMarker position={me} title={live.sharing ? 'You (sharing live)' : 'You are here'} zIndex={2001}>
             <span className="block size-4 rounded-full border-2 border-white bg-sky-500 shadow-[0_0_0_6px_rgb(14_165_233/0.25)]" />
           </AdvancedMarker>
         )}
-        <FitBounds stops={stops} skip={!!selectedId} />
+        <FitBounds stops={stops} skip={!!selectedId || !!focus} />
+        <PanToPerson person={selectedId ? null : focus} />
         <DayLine stops={stops} />
         <PanToSelected stop={stops.find((s) => s.item.id === selectedId) ?? null} />
       </Map>
       <div className="pointer-events-none absolute right-3 bottom-[calc(13rem+env(safe-area-inset-bottom))] flex flex-col gap-2 md:bottom-4">
         {stops.length > 0 && <ShowAll stops={stops} />}
-        <LocateMe onLocated={setMe} />
+        <LiveLocationButton />
+        <LocateMe onLocated={setLocated} live={liveMe} />
       </div>
     </div>
   )

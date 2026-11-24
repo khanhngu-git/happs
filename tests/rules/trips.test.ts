@@ -279,6 +279,43 @@ describe('files', () => {
   })
 })
 
+describe('live locations', () => {
+  const loc = (over: Record<string, unknown> = {}) => ({ lat: -33.86, lng: 151.21, accuracy: 12, updatedAt: serverTimestamp(), ...over })
+  const ref = (as: string, uid: string) => doc(db(env, as), 'trips', TRIP, 'locations', uid)
+  it('members share their own location; only members can see it', async () => {
+    await assertSucceeds(setDoc(ref(MEMBER, MEMBER), loc()))
+    await assertSucceeds(setDoc(ref(MEMBER, MEMBER), loc({ lat: -33.87 })))
+    await assertSucceeds(getDoc(ref(MEMBER2, MEMBER)))
+    await assertFails(getDoc(ref(OUTSIDER, MEMBER)))
+  })
+  it('nobody writes someone else’s location, and outsiders write none', async () => {
+    await assertFails(setDoc(ref(MEMBER2, MEMBER), loc()))
+    await assertFails(setDoc(ref(OUTSIDER, OUTSIDER), loc()))
+  })
+  it('needs a server time and a sane position', async () => {
+    await assertFails(setDoc(ref(MEMBER, MEMBER), loc({ updatedAt: Timestamp.fromMillis(Date.now() - 3_600_000) })))
+    await assertFails(setDoc(ref(MEMBER, MEMBER), loc({ lat: 91 })))
+    await assertFails(setDoc(ref(MEMBER, MEMBER), loc({ lng: 'here' })))
+    await assertFails(setDoc(ref(MEMBER, MEMBER), loc({ name: 'extra' })))
+  })
+  it('you or the owner can delete it, nobody else', async () => {
+    await assertSucceeds(setDoc(ref(MEMBER, MEMBER), loc()))
+    await assertFails(deleteDoc(ref(MEMBER2, MEMBER)))
+    await assertSucceeds(deleteDoc(ref(OWNER, MEMBER)))
+    await assertSucceeds(setDoc(ref(MEMBER, MEMBER), loc()))
+    await assertSucceeds(deleteDoc(ref(MEMBER, MEMBER)))
+  })
+  it('leaving the trip removes your location in the same batch', async () => {
+    await assertSucceeds(setDoc(ref(MEMBER, MEMBER), loc()))
+    const m = db(env, MEMBER)
+    const b = writeBatch(m)
+    b.update(doc(m, 'trips', TRIP), { memberIds: arrayRemove(MEMBER), updatedAt: serverTimestamp() })
+    b.delete(doc(m, 'trips', TRIP, 'members', MEMBER))
+    b.delete(doc(m, 'trips', TRIP, 'locations', MEMBER))
+    await assertSucceeds(b.commit())
+  })
+})
+
 describe('read-only links (publicTrips)', () => {
   const TOKEN = 'abcdefghijklmnopqrstuvwxyz123456'
   const copy = (over: Record<string, unknown> = {}) => ({

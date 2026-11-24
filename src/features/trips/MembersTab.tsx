@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Crown, LogOut, MoreHorizontal, QrCode, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -15,6 +15,9 @@ import { useTrip } from './TripContext'
 import { removeMember, transferOwnership } from './tripApi'
 import { formatInstantDate } from '@/shared/dates'
 import { useTripShares } from '@/features/expenses/expenseApi'
+import { LiveLocationRow } from '@/features/location/LiveLocationControls'
+import { useLiveLocation } from '@/features/location/LiveLocationProvider'
+import { ageLabel } from '@/features/location/liveLocation'
 
 function SectionTitle({ children, id }: { children: React.ReactNode; id: string }) {
   return (
@@ -36,6 +39,7 @@ export function MembersTab() {
   const navigate = useNavigate()
   const { data: invites } = useInvites(trip.id)
   const { data: shares } = useTripShares(trip.id)
+  const live = useLiveLocation()
   /** Unconfirmed payments involving someone: they can't leave or be removed until these settle. */
   const openPayments = (uid: string) => shares.filter((x) => x.debtorUid !== x.payerUid && x.status !== 'confirmed' && (x.debtorUid === uid || x.payerUid === uid)).length
   const myOpen = openPayments(me)
@@ -60,6 +64,11 @@ export function MembersTab() {
                   {m.displayName}
                   {m.id === me && <span className="text-muted-foreground"> (you)</span>}
                 </p>
+                {live.byUid.has(m.id) && (
+                  <Link to={`/trips/${trip.id}/map?person=${m.id}`} className="block truncate text-sm text-primary active:opacity-60">
+                    Sharing live location · {ageLabel(live.byUid.get(m.id)!.updatedAt, live.now)}
+                  </Link>
+                )}
               </div>
               {m.role === 'owner' && (
                 <Badge variant="secondary">
@@ -84,6 +93,13 @@ export function MembersTab() {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section aria-labelledby="live-h">
+        <SectionTitle id="live-h">Live location</SectionTitle>
+        <div className="overflow-hidden rounded-[1.25rem] bg-card ring-1 ring-border/70">
+          <LiveLocationRow />
+        </div>
       </section>
 
       <section aria-labelledby="links-h">

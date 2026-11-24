@@ -7,6 +7,7 @@ import { useUser } from '@/features/auth/AuthProvider'
 import { BellButton } from '@/features/notifications/BellButton'
 import { NotFound } from '@/app/NotFound'
 import { TripProvider } from './TripContext'
+import { LiveLocationProvider } from '@/features/location/LiveLocationProvider'
 import { TabBar } from './TabBar'
 import { TripSwitcher } from './TripSwitcher'
 import { useMembers, useTripDoc } from './tripApi'
@@ -36,6 +37,7 @@ export function TripLayout() {
 
   return (
     <TripProvider trip={trip.data} members={members.data} me={user.uid}>
+      <LiveLocationProvider>
       <PageHeader
         backTo={onAll ? `/trips/${trip.data.id}/itinerary` : '/'}
         backLabel={onAll ? 'Day view' : 'Trips'}
@@ -55,6 +57,7 @@ export function TripLayout() {
         <Outlet />
       </div>
       <TabBar badges={{ expenses: pending }} />
+      </LiveLocationProvider>
     </TripProvider>
   )
 }

@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { formatShortDate, todayInZone, tripDays } from '@/shared/dates'
 import { ITEM_TYPES, type ItemType } from '@/shared/itinerary'
 import { mapStops } from './mapData'
+import { useLiveLocation } from '@/features/location/LiveLocationProvider'
 import { StopCard } from './StopCard'
 import { StopStrip } from './StopStrip'
 
@@ -55,6 +56,8 @@ export function MapTab() {
   const types = useMemo(() => new Set(type ? [type] : ITEM_TYPES), [type])
   const stops = useMemo(() => mapStops(items, day, types), [items, day, types])
   const selectedId = params.get('item')
+  const personId = params.get('person')
+  const live = useLiveLocation()
   const selected = stops.find((s) => s.item.id === selectedId) ?? null
 
   const set = (k: string, v: string | null) =>
@@ -115,7 +118,8 @@ export function MapTab() {
     </ol>
   )
 
-  if (!loading && items.every((i) => i.location?.lat == null)) {
+  // With nothing pinned, the map still opens when someone is sharing where they are.
+  if (!loading && items.every((i) => i.location?.lat == null) && !(hasMaps && live.people.length > 0)) {
     const unpinned = [...items].sort((a, b) => a.date.localeCompare(b.date) || (a.startTime ?? '').localeCompare(b.startTime ?? ''))
     return (
       <main className="mx-auto max-w-2xl px-4 pt-4 pb-28">
@@ -154,7 +158,7 @@ export function MapTab() {
       <div className="relative h-full">
         {hasMaps ? (
           <Suspense fallback={<Skeleton className="size-full rounded-none" />}>
-            <TripMap stops={stops} selectedId={selectedId} onSelect={(id) => set('item', id)} />
+            <TripMap stops={stops} selectedId={selectedId} onSelect={(id) => set('item', id)} personId={personId} />
           </Suspense>
         ) : (
           <div className="h-full overflow-y-auto bg-grouped px-3 pt-36 pb-32">

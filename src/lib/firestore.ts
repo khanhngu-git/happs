@@ -23,6 +23,7 @@ import {
   memberSchema,
   notificationSchema,
   ideaSchema,
+  liveLocationSchema,
   settlementBatchSchema,
   shareSchema,
   tripSchema,
@@ -61,6 +62,7 @@ export const converters = {
   batch: converter(settlementBatchSchema),
   notification: converter(notificationSchema),
   idea: converter(ideaSchema),
+  liveLocation: converter(liveLocationSchema),
 }
 
 export type UserProfile = WithId<z.output<typeof userSchema>>
@@ -73,6 +75,7 @@ export type Share = WithId<z.output<typeof shareSchema>>
 export type SettlementBatch = WithId<z.output<typeof settlementBatchSchema>>
 export type AppNotification = WithId<z.output<typeof notificationSchema>>
 export type Idea = WithId<z.output<typeof ideaSchema>>
+export type LiveLocation = WithId<z.output<typeof liveLocationSchema>>
 
 /* ---------- References ---------- */
 
@@ -93,6 +96,8 @@ export const refs = {
     collection(db, 'trips', tripId, 'expenses', expenseId, 'shares').withConverter(converters.share),
   batches: (tripId: string) => collection(db, 'trips', tripId, 'settlementBatches').withConverter(converters.batch),
   ideas: (tripId: string) => collection(db, 'trips', tripId, 'ideas').withConverter(converters.idea),
+  locations: (tripId: string) => collection(db, 'trips', tripId, 'locations').withConverter(converters.liveLocation),
+  location: (tripId: string, uid: string) => doc(db, 'trips', tripId, 'locations', uid).withConverter(converters.liveLocation),
 }
 
 /* ---------- Realtime hooks ---------- */

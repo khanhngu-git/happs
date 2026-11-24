@@ -321,3 +321,12 @@ export const ideaSchema = z.object({
   createdAt: timestamp.optional(),
 })
 export type IdeaDoc = z.infer<typeof ideaSchema>
+
+/** trips/{tripId}/locations/{uid}: a member's live location, while they choose to share it. */
+export const liveLocationSchema = z.object({
+  lat: z.number(),
+  lng: z.number(),
+  accuracy: z.number().default(0),
+  updatedAt: timestamp,
+})
+export type LiveLocationDoc = z.infer<typeof liveLocationSchema>
