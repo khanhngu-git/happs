@@ -330,5 +330,8 @@ export const liveLocationSchema = z.object({
   lng: z.number(),
   accuracy: z.number().default(0),
   updatedAt: timestamp,
+  /** happs was closed or the phone locked: this is the latest known location, not a live one. */
+  paused: z.boolean().default(false),
+  pausedAt: timestamp.optional(),
 })
 export type LiveLocationDoc = z.infer<typeof liveLocationSchema>

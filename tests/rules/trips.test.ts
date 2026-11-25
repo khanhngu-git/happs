@@ -386,6 +386,15 @@ describe('live locations', () => {
     await assertSucceeds(setDoc(ref(MEMBER, MEMBER), loc()))
     await assertSucceeds(deleteDoc(ref(MEMBER, MEMBER)))
   })
+  it('pausing marks the latest location without moving it', async () => {
+    await assertSucceeds(setDoc(ref(MEMBER, MEMBER), loc()))
+    await assertSucceeds(updateDoc(ref(MEMBER, MEMBER), { paused: true, pausedAt: serverTimestamp() }))
+    await assertFails(updateDoc(ref(MEMBER, MEMBER), { paused: true, pausedAt: serverTimestamp(), lat: 0 }))
+    await assertFails(updateDoc(ref(MEMBER, MEMBER), { paused: true, pausedAt: Timestamp.fromMillis(0) }))
+    await assertFails(updateDoc(ref(MEMBER2, MEMBER), { paused: true, pausedAt: serverTimestamp() }))
+    // The next live fix replaces the document, clearing the pause.
+    await assertSucceeds(setDoc(ref(MEMBER, MEMBER), loc({ lat: -33.87 })))
+  })
   it('leaving the trip removes your location in the same batch', async () => {
     await assertSucceeds(setDoc(ref(MEMBER, MEMBER), loc()))
     const m = db(env, MEMBER)

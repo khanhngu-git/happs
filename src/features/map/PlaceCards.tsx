@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { UserAvatar } from '@/components/UserAvatar'
 import { RouteActions } from '@/features/itinerary/RouteActions'
 import type { Person } from '@/features/location/LiveLocationProvider'
-import { ageLabel } from '@/features/location/liveLocation'
+import { statusLabel } from '@/features/location/liveLocation'
 import type { Location } from '@/shared/schemas'
 
 function CloseButton({ onClose }: { onClose(): void }) {
@@ -27,7 +27,7 @@ export function PersonCard({ person, now, onClose }: { person: Person; now: numb
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{person.name}</p>
           <p className="text-sm">
-            {person.freshness === 'live' ? 'Sharing live' : 'Last seen'} · {ageLabel(person.updatedAt, now)}
+            {statusLabel(person, now)}
             {person.accuracy > 100 && ` · within ${person.accuracy >= 1000 ? `${(person.accuracy / 1000).toFixed(1)} km` : `${Math.round(person.accuracy / 10) * 10} m`}`}
           </p>
         </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ageLabel, distanceM, freshness, HEARTBEAT_MS, HIDE_MS, MIN_INTERVAL_MS, shouldSend, STALE_MS, type Fix } from './liveLocation'
+import { statusLabel, ageLabel, distanceM, freshness, HEARTBEAT_MS, HIDE_MS, MIN_INTERVAL_MS, shouldSend, STALE_MS, type Fix } from './liveLocation'
 
 const at = (lat: number, lng: number, t: number, accuracy = 10): Fix => ({ lat, lng, accuracy, at: t })
 
@@ -46,5 +46,13 @@ describe('freshness and ageLabel', () => {
     expect(ageLabel(0, 4 * 60_000)).toBe('4 min ago')
     expect(ageLabel(0, 125 * 60_000)).toBe('2 hr ago')
     expect(ageLabel(1000, 0)).toBe('Just now')
+  })
+})
+
+describe('statusLabel', () => {
+  it('says live, paused or latest known', () => {
+    expect(statusLabel({ paused: false, freshness: 'live', updatedAt: 0 }, 30_000)).toBe('Sharing live · Just now')
+    expect(statusLabel({ paused: true, freshness: 'live', updatedAt: 0 }, 5 * 60_000)).toBe('Paused · latest known location, 5 min ago')
+    expect(statusLabel({ paused: false, freshness: 'stale', updatedAt: 0 }, 20 * 60_000)).toBe('Latest known location, 20 min ago')
   })
 })

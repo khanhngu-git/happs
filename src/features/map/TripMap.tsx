@@ -7,7 +7,7 @@ import { ITEM_TYPE_META, iconFor } from '@/features/itinerary/itemTypes'
 import { UserAvatar } from '@/components/UserAvatar'
 import { LiveLocationButton } from '@/features/location/LiveLocationControls'
 import { useLiveLocation, type Person } from '@/features/location/LiveLocationProvider'
-import { ageLabel } from '@/features/location/liveLocation'
+import { ageLabel, statusLabel } from '@/features/location/liveLocation'
 import { arcPath, type MapStop } from './mapData'
 
 /** Fit the viewport to the visible markers whenever they change. */
@@ -173,9 +173,10 @@ function PanToPerson({ person }: { person: Person | null }) {
 
 /** A member sharing their location: their photo, ringed, with their first name underneath. Tap for directions to them. */
 function PersonPin({ person, now, selected, dimmed, onSelect }: { person: Person; now: number; selected: boolean; dimmed: boolean; onSelect(): void }) {
-  const stale = person.freshness === 'stale'
+  // Paused (happs closed) or gone quiet: greyed, as the latest known location.
+  const stale = person.freshness === 'stale' || person.paused
   return (
-    <AdvancedMarker position={{ lat: person.lat, lng: person.lng }} title={`${person.name} · ${ageLabel(person.updatedAt, now)}`} zIndex={selected ? 2002 : 2000} onClick={onSelect}>
+    <AdvancedMarker position={{ lat: person.lat, lng: person.lng }} title={`${person.name} · ${statusLabel(person, now)}`} zIndex={selected ? 2002 : 2000} onClick={onSelect}>
       <div className="flex flex-col items-center transition-all" style={{ opacity: dimmed ? 0.45 : stale ? 0.55 : 1 }} aria-hidden>
         <UserAvatar
           name={person.name}
@@ -184,7 +185,7 @@ function PersonPin({ person, now, selected, dimmed, onSelect }: { person: Person
         />
         <span className="mt-0.5 max-w-24 truncate rounded-full bg-white px-1.5 text-[0.6875rem] font-semibold text-zinc-900 shadow-[0_1px_3px_rgb(0_0_0/0.3)]">
           {person.name.split(' ')[0]}
-          {stale && ` · ${ageLabel(person.updatedAt, now)}`}
+          {person.paused ? ' · paused' : stale && ` · ${ageLabel(person.updatedAt, now)}`}
         </span>
       </div>
     </AdvancedMarker>

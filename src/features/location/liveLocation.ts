@@ -72,3 +72,15 @@ export function ageLabel(updatedAt: number, now: number): string {
 
 /** Where to turn location back on, in iOS's words. */
 export const IOS_LOCATION_HELP = 'On iPhone: Settings › Privacy & Security › Location Services: turn it on, then Safari Websites › While Using the App.'
+
+/**
+ * How to describe someone's location: "Sharing live · Just now", or, once
+ * they've closed happs or it's gone quiet, "Paused · latest known location,
+ * 5 min ago".
+ */
+export function statusLabel(p: { paused: boolean; freshness: 'live' | 'stale'; updatedAt: number }, now: number): string {
+  const age = ageLabel(p.updatedAt, now)
+  if (p.paused) return `Paused · latest known location, ${age.toLowerCase()}`
+  if (p.freshness === 'stale') return `Latest known location, ${age.toLowerCase()}`
+  return `Sharing live · ${age}`
+}

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { deleteDoc, doc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { deleteDoc, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore'
 import { toast } from 'sonner'
 import { db } from '@/lib/firebase'
 import { refs, useLiveQuery, type LiveLocation } from '@/lib/firestore'
@@ -29,6 +29,8 @@ export interface Person {
   accuracy: number
   updatedAt: number
   freshness: Exclude<Freshness, 'hidden'>
+  /** They closed happs or locked their phone: this is their latest known location. */
+  paused: boolean
 }
 
 interface LiveLocationValue {
@@ -85,6 +87,11 @@ async function writeFix(tripId: string, uid: string, fix: Fix) {
     accuracy: Math.round(fix.accuracy),
     updatedAt: serverTimestamp(),
   })
+}
+
+/** Best effort: iOS gives a closing page only a moment, so this may land when happs next opens instead. */
+function pauseMyLocation(tripId: string, uid: string) {
+  updateDoc(doc(db, 'trips', tripId, 'locations', uid), { paused: true, pausedAt: serverTimestamp() }).catch(() => undefined)
 }
 
 async function clearMyLocation(tripId: string, uid: string) {
@@ -172,16 +179,24 @@ export function LiveLocationProvider({ children }: { children: ReactNode }) {
       },
       WATCH,
     )
-    // Back from the background: the last write may be old, so send the next fix right away.
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') lastSent.current = null
+    // Going to the background (app switched, phone locked, happs closed): tell the others this is
+    // now a latest known location. Back again: send the next fix right away, which clears it.
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        if (lastSent.current) pauseMyLocation(tripId, me)
+      } else lastSent.current = null
     }
-    document.addEventListener('visibilitychange', onVisible)
+    const onHide = () => {
+      if (lastSent.current) pauseMyLocation(tripId, me)
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('pagehide', onHide)
     return () => {
       navigator.geolocation.clearWatch(id)
-      document.removeEventListener('visibilitychange', onVisible)
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pagehide', onHide)
     }
-  }, [sharing, send, stop, setPermission])
+  }, [sharing, send, stop, setPermission, tripId, me])
 
   const setSharing = useCallback(
     async (on: boolean) => {
@@ -225,7 +240,7 @@ export function LiveLocationProvider({ children }: { children: ReactNode }) {
       if (!member || !updatedAt) continue
       const f = freshness(updatedAt, now)
       if (f === 'hidden') continue
-      byUid.set(d.id, { uid: d.id, name: member.displayName, photoURL: member.photoURL, lat: d.lat, lng: d.lng, accuracy: d.accuracy, updatedAt, freshness: f })
+      byUid.set(d.id, { uid: d.id, name: member.displayName, photoURL: member.photoURL, lat: d.lat, lng: d.lng, accuracy: d.accuracy, updatedAt, freshness: f, paused: d.paused === true })
     }
     const people = [...byUid.values()].filter((p) => p.uid !== me).sort((a, b) => b.updatedAt - a.updatedAt)
     return { people, byUid }

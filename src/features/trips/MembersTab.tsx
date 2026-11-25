@@ -17,7 +17,7 @@ import { formatInstantDate } from '@/shared/dates'
 import { useTripShares } from '@/features/expenses/expenseApi'
 import { LiveLocationRow } from '@/features/location/LiveLocationControls'
 import { useLiveLocation } from '@/features/location/LiveLocationProvider'
-import { ageLabel } from '@/features/location/liveLocation'
+import { statusLabel } from '@/features/location/liveLocation'
 
 function SectionTitle({ children, id }: { children: React.ReactNode; id: string }) {
   return (
@@ -91,7 +91,7 @@ export function MembersTab() {
                   </span>
                   {live.byUid.has(m.id) && (
                     <span className="flex items-center gap-1 truncate text-sm text-primary">
-                      <MapPin className="size-3.5 shrink-0" aria-hidden /> Sharing live location · {ageLabel(live.byUid.get(m.id)!.updatedAt, live.now)}
+                      <MapPin className="size-3.5 shrink-0" aria-hidden /> {statusLabel(live.byUid.get(m.id)!, live.now)}
                     </span>
                   )}
                 </span>

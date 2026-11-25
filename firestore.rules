@@ -414,6 +414,11 @@ service cloud.firestore {
           && request.resource.data.lng is number && request.resource.data.lng >= -180 && request.resource.data.lng <= 180
           && request.resource.data.accuracy is number && request.resource.data.accuracy >= 0
           && request.resource.data.updatedAt == request.time;
+        // Closing happs or locking the phone marks the latest position as paused; the position itself stays.
+        allow update: if isMember(tripId) && uid == me()
+          && onlyChanges(['paused', 'pausedAt'])
+          && request.resource.data.paused == true
+          && request.resource.data.pausedAt == request.time;
         // Turning it off or leaving (yourself), or the owner removing someone or deleting the trip.
         allow delete: if signedIn() && (uid == me() || canManage(tripId));
       }
