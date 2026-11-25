@@ -42,6 +42,22 @@ service cloud.firestore {
       return signedIn() && exists(tripPath(tripId)) && trip(tripId).ownerId == me();
     }
 
+    // Admins: members the owner trusts with the owner's day-to-day powers (edit
+    // trip details, remove members, revoke invites, delete anyone's plans, costs
+    // and ideas). Deleting the trip, handing over ownership and choosing admins
+    // stay with the owner.
+    function admins(t) {
+      return t.get('adminIds', []);
+    }
+
+    function isAdmin(tripId) {
+      return isMember(tripId) && me() in admins(trip(tripId));
+    }
+
+    function canManage(tripId) {
+      return isOwner(tripId) || isAdmin(tripId);
+    }
+
     function changedKeys() {
       return request.resource.data.diff(resource.data).affectedKeys();
     }
@@ -140,7 +156,7 @@ service cloud.firestore {
 
       allow update: if signedIn() && (
         (isMember(resource.data.tripId)
-          && (isOwner(resource.data.tripId) || resource.data.createdBy == me())
+          && (canManage(resource.data.tripId) || resource.data.createdBy == me())
           && onlyChanges(['revoked'])
           && request.resource.data.revoked == true)
         // Joining: I'm not on the trip yet, and I am after this batch.
@@ -171,9 +187,9 @@ service cloud.firestore {
         && isPhoto(request.resource.data.get('coverPhotoURL', null), 240000)
         && request.resource.data.items is list && request.resource.data.items.size() <= 400
         && (resource == null || resource.data.tripId == request.resource.data.tripId);
-      // The owner turns the link off, changes it, or deletes the trip. (A
-      // link made before public copies existed has none to delete.)
-      allow delete: if signedIn() && (resource == null || isOwner(resource.data.tripId));
+      // The owner or an admin turns the link off or changes it, or the owner
+      // deletes the trip. (A link made before public copies existed has none to delete.)
+      allow delete: if signedIn() && (resource == null || canManage(resource.data.tripId));
     }
 
     /* ---------------- users ---------------- */
@@ -233,7 +249,7 @@ service cloud.firestore {
         return d.keys().hasAll(['name', 'startDate', 'endDate', 'timeZone', 'baseCurrency', 'ownerId', 'memberIds'])
           && d.keys().hasOnly(['name', 'destination', 'startDate', 'endDate', 'timeZone', 'baseCurrency',
                                'ownerId', 'memberIds', 'coverEmoji', 'coverColor', 'coverPhotoURL', 'createdAt', 'updatedAt',
-                               'shareToken', 'notes'])
+                               'shareToken', 'notes', 'adminIds'])
           && isNonEmptyStr(d.name, 100)
           // Read-only link token: long and random, or off.
           && (d.get('shareToken', null) == null || (d.shareToken is string && d.shareToken.matches('^[A-Za-z0-9]{24,64}$')))
@@ -243,7 +259,23 @@ service cloud.firestore {
           && isDate(d.startDate) && isDate(d.endDate) && d.startDate <= d.endDate
           && isNonEmptyStr(d.timeZone, 64)
           && isCurrency(d.baseCurrency)
-          && d.memberIds is list;
+          && d.memberIds is list
+          // Admins are members other than the owner.
+          && admins(d) is list && admins(d).size() <= 50
+          && admins(d).toSet().difference(d.memberIds.toSet()).size() == 0
+          && !(d.ownerId in admins(d));
+      }
+
+      function adminsBefore() {
+        return admins(resource.data);
+      }
+
+      function adminsAfter() {
+        return admins(request.resource.data);
+      }
+
+      function amAdmin() {
+        return me() in resource.data.memberIds && me() in adminsBefore();
       }
 
       allow read: if signedIn() && me() in resource.data.memberIds;
@@ -251,13 +283,18 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.ownerId == me()
         && request.resource.data.memberIds == [me()]
+        && adminsAfter().size() == 0
         && validTrip(request.resource.data);
 
       allow update: if signedIn() && validTrip(request.resource.data) && (
-        // The owner edits trip details, and may hand ownership to an existing member.
+        // The owner edits trip details, chooses admins, and may hand ownership to an existing member.
         (resource.data.ownerId == me()
           && request.resource.data.memberIds == resource.data.memberIds
           && request.resource.data.ownerId in resource.data.memberIds)
+        // An admin edits trip details, but not who's on it, who owns it or who else is admin.
+        || (amAdmin()
+          && unchanged(['ownerId', 'memberIds'])
+          && adminsAfter() == adminsBefore())
         // Joining with an invite (see members and invites below).
         || (!(me() in resource.data.memberIds)
           && onlyChanges(['memberIds', 'updatedAt'])
@@ -265,17 +302,28 @@ service cloud.firestore {
           && resource.data.memberIds.size() < 50
           && existsAfter(memberPath(tripId, me()))
           && inviteOk(getAfter(memberPath(tripId, me())).data.get('inviteCode', null), tripId))
-        // Leaving (the owner hands over ownership first).
+        // Leaving (the owner hands over ownership first); an admin gives that up too.
         || (me() in resource.data.memberIds
           && me() != resource.data.ownerId
-          && onlyChanges(['memberIds', 'updatedAt'])
-          && request.resource.data.memberIds == resource.data.memberIds.removeAll([me()]))
-        // The owner removes someone else.
+          && onlyChanges(['memberIds', 'adminIds', 'updatedAt'])
+          && request.resource.data.memberIds == resource.data.memberIds.removeAll([me()])
+          && adminsAfter() == adminsBefore().removeAll([me()]))
+        // The owner removes someone else (an admin loses admin with it).
         || (resource.data.ownerId == me()
-          && onlyChanges(['memberIds', 'updatedAt'])
+          && onlyChanges(['memberIds', 'adminIds', 'updatedAt'])
           && request.resource.data.memberIds.size() == resource.data.memberIds.size() - 1
           && resource.data.memberIds.hasAll(request.resource.data.memberIds)
-          && me() in request.resource.data.memberIds)
+          && me() in request.resource.data.memberIds
+          && adminsAfter() == adminsBefore().removeAll(resource.data.memberIds.removeAll(request.resource.data.memberIds)))
+        // An admin removes a regular member (not the owner or another admin).
+        || (amAdmin()
+          && onlyChanges(['memberIds', 'adminIds', 'updatedAt'])
+          && adminsAfter() == adminsBefore()
+          && request.resource.data.memberIds.size() == resource.data.memberIds.size() - 1
+          && resource.data.memberIds.hasAll(request.resource.data.memberIds)
+          && me() in request.resource.data.memberIds
+          && request.resource.data.ownerId in request.resource.data.memberIds
+          && !adminsBefore().hasAny(resource.data.memberIds.removeAll(request.resource.data.memberIds)))
       );
 
       allow delete: if signedIn() && resource.data.ownerId == me();
@@ -319,6 +367,11 @@ service cloud.firestore {
         allow delete: if signedIn() && (
           isOwner(tripId)
           || (memberId == me() && !(me() in getAfter(tripPath(tripId)).data.memberIds))
+          // An admin removing a regular member, in the same batch as memberIds.
+          || (isAdmin(tripId)
+            && memberId != trip(tripId).ownerId
+            && !(memberId in admins(trip(tripId)))
+            && !(memberId in getAfter(tripPath(tripId)).data.memberIds))
         );
       }
 
@@ -340,14 +393,14 @@ service cloud.firestore {
           && validIdea(request.resource.data)
           && request.resource.data.createdBy == me()
           && request.resource.data.votes in [[], [me()]];
-        // Anyone votes or unvotes only for themselves; the creator edits the text.
+        // Anyone votes or unvotes only for themselves; the creator, owner or an admin edits the text.
         allow update: if isMember(tripId) && validIdea(request.resource.data) && (
           (onlyChanges(['votes'])
             && request.resource.data.votes.toSet().difference(resource.data.votes.toSet()).union(
                  resource.data.votes.toSet().difference(request.resource.data.votes.toSet())) == [me()].toSet())
-          || (resource.data.createdBy == me() && onlyChanges(['title', 'type', 'location', 'note']))
+          || ((resource.data.createdBy == me() || canManage(tripId)) && onlyChanges(['title', 'type', 'location', 'note']))
         );
-        allow delete: if isMember(tripId) && (resource.data.createdBy == me() || isOwner(tripId));
+        allow delete: if isMember(tripId) && (resource.data.createdBy == me() || canManage(tripId));
       }
 
       /* ---- live locations: one per member, only while they choose to share ---- */
@@ -362,7 +415,7 @@ service cloud.firestore {
           && request.resource.data.accuracy is number && request.resource.data.accuracy >= 0
           && request.resource.data.updatedAt == request.time;
         // Turning it off or leaving (yourself), or the owner removing someone or deleting the trip.
-        allow delete: if signedIn() && (uid == me() || isOwner(tripId));
+        allow delete: if signedIn() && (uid == me() || canManage(tripId));
       }
 
       /* ---- files: tickets and PDFs attached to plans (base64, one per document) ---- */
@@ -445,7 +498,7 @@ service cloud.firestore {
         allow update: if isMember(tripId)
           && validItem(request.resource.data)
           && request.resource.data.createdBy == resource.data.createdBy;
-        allow delete: if isMember(tripId) && (resource.data.createdBy == me() || isOwner(tripId));
+        allow delete: if isMember(tripId) && (resource.data.createdBy == me() || canManage(tripId));
       }
 
       /* ---- expenses ---- */
@@ -479,7 +532,7 @@ service cloud.firestore {
         allow update: if isMember(tripId)
           && validExpense(request.resource.data)
           && request.resource.data.createdBy == resource.data.createdBy;
-        allow delete: if isMember(tripId) && (resource.data.createdBy == me() || isOwner(tripId));
+        allow delete: if isMember(tripId) && (resource.data.createdBy == me() || canManage(tripId));
 
         /* ---- shares: the payment state machine ----
          *   unpaid   --debtor-->  sent       (markSent)

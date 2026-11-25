@@ -19,6 +19,7 @@ export function TripLayout() {
   const location = useLocation()
   const trip = useTripDoc(tripId)
   const members = useMembers(tripId)
+  const canManage = !!trip.data && (trip.data.ownerId === user.uid || (trip.data.adminIds ?? []).includes(user.uid))
   const pending = usePendingConfirmations(tripId, user.uid)
   const section = location.pathname.split('/')[3] ?? 'itinerary'
   const onAll = location.pathname.endsWith('/itinerary/all')
@@ -45,7 +46,7 @@ export function TripLayout() {
         actions={
           <>
             <BellButton />
-            {trip.data.ownerId === user.uid && (
+            {canManage && (
               <Link to={`/trips/${trip.data.id}/settings`} className="inline-flex size-11 items-center justify-center rounded-full text-primary active:opacity-60" aria-label="Trip settings">
                 <Settings className="size-[1.375rem]" aria-hidden />
               </Link>

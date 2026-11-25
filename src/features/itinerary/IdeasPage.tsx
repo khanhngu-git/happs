@@ -23,7 +23,7 @@ import { useTripDay } from './useTripDay'
  * the most wanted rise to the top, and "Plan it" opens the normal form.
  */
 export function IdeasPage() {
-  const { trip, me, isOwner, nameOf } = useTrip()
+  const { trip, me, canManage, nameOf } = useTrip()
   const { data: items } = useItems(trip.id)
   const { data: ideas, loading } = useLiveQuery<Idea>(query(refs.ideas(trip.id), orderBy('createdAt', 'desc')), `ideas:${trip.id}`)
   const { dialogs, addPrefilled } = useItineraryDialogs(items)
@@ -101,7 +101,7 @@ export function IdeasPage() {
                   >
                     <CalendarPlus /> Plan it
                   </Button>
-                  {(i.createdBy === me || isOwner) && (
+                  {(i.createdBy === me || canManage) && (
                     <button
                       type="button"
                       onClick={() => deleteDoc(doc(db, 'trips', trip.id, 'ideas', i.id)).catch(() => toast.error('Couldn’t remove it'))}

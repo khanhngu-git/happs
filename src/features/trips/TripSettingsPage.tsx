@@ -14,11 +14,11 @@ import { coverPhoto } from '@/lib/uploads'
 import { refreshSharedTrip, setShareLink } from '@/features/share/shareApi'
 
 export function TripSettingsPage() {
-  const { trip, isOwner, me, members } = useTrip()
+  const { trip, isOwner, canManage, me, members } = useTrip()
   const navigate = useNavigate()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const hasExpenses = useLiveQuery(query(refs.expenses(trip.id), limit(1)), `anyExpense:${trip.id}`).data.length > 0
-  if (!isOwner) return <Navigate to={`/trips/${trip.id}/itinerary`} replace />
+  if (!canManage) return <Navigate to={`/trips/${trip.id}/itinerary`} replace />
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-grouped">
@@ -40,17 +40,19 @@ export function TripSettingsPage() {
                 toast.success('Trip updated')
                 navigate(`/trips/${trip.id}/itinerary`)
               } catch {
-                toast.error('Couldn’t save. Only the owner can edit trip details.')
+                toast.error('Couldn’t save. Only the owner and admins can edit trip details.')
               }
             }}
           />
         </div>
         <ShareLinkSection />
-        <div className="px-4">
-          <Button variant="destructive" className="w-full" onClick={() => setConfirmDelete(true)}>
-            <Trash2 /> Delete trip
-          </Button>
-        </div>
+        {isOwner && (
+          <div className="px-4">
+            <Button variant="destructive" className="w-full" onClick={() => setConfirmDelete(true)}>
+              <Trash2 /> Delete trip
+            </Button>
+          </div>
+        )}
       </main>
       <ConfirmDialog
         open={confirmDelete}

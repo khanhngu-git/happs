@@ -20,7 +20,7 @@ import { deleteItem } from './itineraryApi'
 
 /** Activity details: when, where, notes and booking. Costs live in Expenses. */
 export function ItemSheet({ item, onOpenChange, onEdit }: { item: Item | null; onOpenChange(o: boolean): void; onEdit(): void }) {
-  const { trip, me, isOwner } = useTrip()
+  const { trip, me, canManage } = useTrip()
   const [confirm, setConfirm] = useState(false)
   const [viewing, setViewing] = useState<Attachment | null>(null)
   // Opening a plan loads its documents into Firestore's offline cache, so tickets open with no signal.
@@ -30,7 +30,7 @@ export function ItemSheet({ item, onOpenChange, onEdit }: { item: Item | null; o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filesKey, trip.id])
   if (!item) return null
-  const canDelete = item.createdBy === me || isOwner
+  const canDelete = item.createdBy === me || canManage
   const when = item.type === 'stay' && item.checkOut ? `${formatLongDate(item.date)} → ${formatLongDate(item.checkOut.date)}` : formatLongDate(item.date)
 
   return (

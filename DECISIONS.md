@@ -129,3 +129,12 @@ The project stays on Firebase's free Spark plan, which has no Cloud Functions an
 - **Data:** `trips/{tripId}/locations/{uid}` = `{lat, lng, accuracy, updatedAt}`. Members read; you write only your own, with `updatedAt == request.time` so a position can't be backdated; you or the owner delete. It's removed when you leave or are removed, and when the trip is deleted.
 - **Writes are throttled** (`shouldSend`): at most one every 10 s, on a move larger than the GPS error (at least 25 m), on a much better fix, or a 2-minute heartbeat. Nothing is written offline, so queued writes don't land later with a wrong time.
 - **Freshness:** pins older than 10 minutes fade and show "last seen"; after 6 hours they're hidden (someone closed happs and forgot to turn it off).
+- **Tap a member** on the map for a card with how fresh their location is and the usual directions (Google Maps; Amap and taxi in mainland China), from where you are to where they are.
+- **Long-press to drop a pin** (right-click on a computer). Google Maps has no long-press event, so `LongPress` watches pointer events on the map and converts the point through an overlay's projection; moving more than 10 px, pinching, panning or lifting before 500 ms cancels it. The pin is in the URL (`?pin=lat,lng`), like a selected stop. Its card looks up the address (Geocoding API; coordinates if that's unavailable) and offers directions, "Add to itinerary" (the plan form, prefilled with the place) and copy coordinates. Only one card is open at a time: a stop, a person or a pin.
+- **Tap a member in Members** to open the map on their live location, with directions. If they aren't sharing, a short note says so.
+
+## Admins, 2026-11-25
+- **The owner can make any member an admin** (Members › ⋯ › Make admin) and take it away again. Admins are `trips.adminIds`, a list on the trip doc, so the rules check it with the trip read they already do. The owner is never in it.
+- **Admins can do what the owner does day to day:** edit trip details and the read-only link (Trip settings), remove regular members, revoke anyone's invite link, and edit or delete anyone's plans, costs and ideas (every member could already add and edit plans and costs).
+- **Owner only:** deleting the trip, handing over ownership and choosing admins. Admins can't remove the owner or another admin.
+- Removing or leaving takes admin away in the same write, and the new owner stops being an admin when ownership is handed over.

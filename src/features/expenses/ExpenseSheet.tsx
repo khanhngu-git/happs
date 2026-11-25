@@ -16,13 +16,13 @@ import { ShareRow } from './ShareRow'
 const SPLIT_LABEL = { equal: 'split equally', exact: 'split by amounts', percent: 'split by percent' } as const
 
 export function ExpenseSheet({ expense, shares, onOpenChange, onEdit }: { expense: Expense | null; shares: Share[]; onOpenChange(o: boolean): void; onEdit(): void }) {
-  const { trip, me, isOwner, nameOf } = useTrip()
+  const { trip, me, canManage, nameOf } = useTrip()
   const [confirm, setConfirm] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   if (!expense) return null
   const mine = shares.filter((s) => s.expenseId === expense.id).sort((a, b) => (a.debtorUid === expense.paidBy ? -1 : b.debtorUid === expense.paidBy ? 1 : a.debtorUid.localeCompare(b.debtorUid)))
   const moneyMoved = mine.some((s) => s.debtorUid !== s.payerUid && s.status !== 'unpaid')
-  const canDelete = expense.createdBy === me || isOwner
+  const canDelete = expense.createdBy === me || canManage
   const history = mine
     .flatMap((s) => s.history.filter((h) => h.byUid !== 'system').map((h) => ({ ...h, debtor: s.debtorUid })))
     .sort((a, b) => b.at.toMillis() - a.at.toMillis())

@@ -279,6 +279,87 @@ describe('files', () => {
   })
 })
 
+describe('admins', () => {
+  const trip = (uid: string) => doc(db(env, uid), 'trips', TRIP)
+  const makeAdmin = (uid: string) => env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), 'trips', TRIP), { adminIds: [uid] }))
+  /** Remove `who` the way the app does: memberIds, adminIds and the member doc in one batch. */
+  const remove = (as: string, who: string) => {
+    const d = db(env, as)
+    const b = writeBatch(d)
+    b.update(doc(d, 'trips', TRIP), { memberIds: arrayRemove(who), adminIds: arrayRemove(who), updatedAt: serverTimestamp() })
+    b.delete(doc(d, 'trips', TRIP, 'members', who))
+    return b.commit()
+  }
+
+  it('only the owner chooses admins, and only from members other than the owner', async () => {
+    await assertFails(updateDoc(trip(MEMBER), { adminIds: [MEMBER] }))
+    await assertFails(updateDoc(trip(OWNER), { adminIds: [OUTSIDER] }))
+    await assertFails(updateDoc(trip(OWNER), { adminIds: [OWNER] }))
+    await assertSucceeds(updateDoc(trip(OWNER), { adminIds: arrayUnion(MEMBER) }))
+    // An admin can't make someone else an admin, or take it away.
+    await assertFails(updateDoc(trip(MEMBER), { adminIds: arrayUnion(MEMBER2) }))
+    await assertFails(updateDoc(trip(MEMBER), { adminIds: [] }))
+    await assertSucceeds(updateDoc(trip(OWNER), { adminIds: arrayRemove(MEMBER) }))
+  })
+
+  it('admins edit trip details but not ownership or who is on the trip', async () => {
+    await assertFails(updateDoc(trip(MEMBER), { name: 'Not mine' }))
+    await makeAdmin(MEMBER)
+    await assertSucceeds(updateDoc(trip(MEMBER), { name: 'Renamed by admin', notes: 'x', updatedAt: serverTimestamp() }))
+    await assertFails(updateDoc(trip(MEMBER), { ownerId: MEMBER }))
+    await assertFails(updateDoc(trip(MEMBER), { memberIds: arrayUnion(OUTSIDER) }))
+    await assertFails(deleteDoc(trip(MEMBER)))
+  })
+
+  it('admins remove regular members, but not the owner or another admin', async () => {
+    await assertFails(remove(MEMBER, MEMBER2))
+    await makeAdmin(MEMBER)
+    await assertFails(remove(MEMBER, OWNER))
+    await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), 'trips', TRIP), { adminIds: [MEMBER, MEMBER2] }))
+    await assertFails(remove(MEMBER, MEMBER2))
+    await makeAdmin(MEMBER)
+    await assertSucceeds(remove(MEMBER, MEMBER2))
+  })
+
+  it('the owner removing an admin takes admin away too; an admin can leave', async () => {
+    await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), 'trips', TRIP), { adminIds: [MEMBER, MEMBER2] }))
+    await assertSucceeds(remove(OWNER, MEMBER2))
+    await assertSucceeds(remove(MEMBER, MEMBER))
+    const t = await getDoc(trip(OWNER))
+    if (JSON.stringify(t.data()?.adminIds) !== '[]') throw new Error(`adminIds left: ${JSON.stringify(t.data()?.adminIds)}`)
+  })
+
+  it('handing over ownership to an admin drops them from admins', async () => {
+    await makeAdmin(MEMBER)
+    await assertFails(updateDoc(trip(OWNER), { ownerId: MEMBER }))
+    await assertSucceeds(updateDoc(trip(OWNER), { ownerId: MEMBER, adminIds: arrayRemove(MEMBER) }))
+  })
+
+  it('admins delete anyone’s plans, costs and ideas; members only their own', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const d = ctx.firestore()
+      await setDoc(doc(d, 'trips', TRIP, 'items', 'i1'), { type: 'activity', title: 'Bund', date: '2026-12-06', createdBy: MEMBER2 })
+      await setDoc(doc(d, 'trips', TRIP, 'ideas', 'd1'), { title: 'Zoo', createdBy: MEMBER2, votes: [] })
+    })
+    await assertFails(deleteDoc(doc(db(env, MEMBER), 'trips', TRIP, 'items', 'i1')))
+    await assertFails(deleteDoc(doc(db(env, MEMBER), 'trips', TRIP, 'ideas', 'd1')))
+    await assertFails(updateDoc(doc(db(env, MEMBER), 'trips', TRIP, 'ideas', 'd1'), { title: 'Aquarium' }))
+    await makeAdmin(MEMBER)
+    await assertSucceeds(updateDoc(doc(db(env, MEMBER), 'trips', TRIP, 'ideas', 'd1'), { title: 'Aquarium' }))
+    await assertSucceeds(deleteDoc(doc(db(env, MEMBER), 'trips', TRIP, 'items', 'i1')))
+    await assertSucceeds(deleteDoc(doc(db(env, MEMBER), 'trips', TRIP, 'ideas', 'd1')))
+  })
+
+  it('admins revoke anyone’s invite link', async () => {
+    await env.withSecurityRulesDisabled((ctx) =>
+      setDoc(doc(ctx.firestore(), 'invites', 'ABCDEFGHJK99'), { code: 'ABCDEFGHJK99', tripId: TRIP, createdBy: MEMBER2, uses: 0, revoked: false }),
+    )
+    await assertFails(updateDoc(doc(db(env, MEMBER), 'invites', 'ABCDEFGHJK99'), { revoked: true }))
+    await makeAdmin(MEMBER)
+    await assertSucceeds(updateDoc(doc(db(env, MEMBER), 'invites', 'ABCDEFGHJK99'), { revoked: true }))
+  })
+})
+
 describe('live locations', () => {
   const loc = (over: Record<string, unknown> = {}) => ({ lat: -33.86, lng: 151.21, accuracy: 12, updatedAt: serverTimestamp(), ...over })
   const ref = (as: string, uid: string) => doc(db(env, as), 'trips', TRIP, 'locations', uid)

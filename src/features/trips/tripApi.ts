@@ -1,5 +1,5 @@
 import type { PayTo } from '@/shared/schemas'
-import { arrayRemove, collectionGroup, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc, where, writeBatch, collection, type DocumentReference } from 'firebase/firestore'
+import { arrayRemove, arrayUnion, collectionGroup, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc, where, writeBatch, collection, type DocumentReference } from 'firebase/firestore'
 import { notify } from '@/features/notifications/notify'
 import { db } from '@/lib/firebase'
 import { refs, useLiveDoc, useLiveQuery, type Member, type Trip } from '@/lib/firestore'
@@ -44,10 +44,10 @@ export async function updateTrip(tripId: string, input: Partial<TripInput>) {
   await updateDoc(doc(db, 'trips', tripId), { ...input, updatedAt: serverTimestamp() })
 }
 
-/** Owner removes someone, or a member leaves: one batch, checked by the rules. */
+/** Owner or an admin removes someone, or a member leaves: one batch, checked by the rules. An admin stops being one. */
 export async function removeMember(tripId: string, uid: string) {
   const batch = writeBatch(db)
-  batch.update(doc(db, 'trips', tripId), { memberIds: arrayRemove(uid), updatedAt: serverTimestamp() })
+  batch.update(doc(db, 'trips', tripId), { memberIds: arrayRemove(uid), adminIds: arrayRemove(uid), updatedAt: serverTimestamp() })
   batch.delete(doc(db, 'trips', tripId, 'members', uid))
   // Their live location goes with them.
   batch.delete(doc(db, 'trips', tripId, 'locations', uid))
@@ -128,10 +128,15 @@ export async function leaveAllTrips(uid: string, myName: string) {
   }
 }
 
-/** Hand ownership to another member: trip.ownerId and both member roles. */
+/** Owner only: make a member an admin, or take it away. */
+export async function setAdmin(tripId: string, uid: string, admin: boolean) {
+  await updateDoc(doc(db, 'trips', tripId), { adminIds: admin ? arrayUnion(uid) : arrayRemove(uid), updatedAt: serverTimestamp() })
+}
+
+/** Hand ownership to another member: trip.ownerId and both member roles. The new owner stops being an admin. */
 export async function transferOwnership(tripId: string, fromUid: string, toUid: string) {
   const batch = writeBatch(db)
-  batch.update(doc(db, 'trips', tripId), { ownerId: toUid, updatedAt: serverTimestamp() })
+  batch.update(doc(db, 'trips', tripId), { ownerId: toUid, adminIds: arrayRemove(toUid), updatedAt: serverTimestamp() })
   batch.update(doc(db, 'trips', tripId, 'members', toUid), { role: 'owner' })
   batch.update(doc(db, 'trips', tripId, 'members', fromUid), { role: 'member' })
   await batch.commit()

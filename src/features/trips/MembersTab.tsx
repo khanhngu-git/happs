@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router'
-import { Crown, LogOut, MoreHorizontal, QrCode, UserPlus } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router'
+import { Crown, LogOut, MapPin, MoreHorizontal, QrCode, ShieldCheck, ShieldOff, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,7 @@ import type { Member } from '@/lib/firestore'
 import { InviteDialog } from '@/features/invites/InviteDialog'
 import { isInviteActive, revokeInvite, useInvites } from '@/features/invites/inviteApi'
 import { useTrip } from './TripContext'
-import { removeMember, transferOwnership } from './tripApi'
+import { removeMember, setAdmin, transferOwnership } from './tripApi'
 import { formatInstantDate } from '@/shared/dates'
 import { useTripShares } from '@/features/expenses/expenseApi'
 import { LiveLocationRow } from '@/features/location/LiveLocationControls'
@@ -28,7 +28,7 @@ function SectionTitle({ children, id }: { children: React.ReactNode; id: string 
 }
 
 export function MembersTab() {
-  const { trip, members, me, isOwner } = useTrip()
+  const { trip, members, me, isOwner, canManage, isAdminId } = useTrip()
   const [params, setParams] = useSearchParams()
   const [inviteOpen, setInviteOpen] = useState(params.get('invite') === '1')
   const [removing, setRemoving] = useState<Member | null>(null)
@@ -44,7 +44,25 @@ export function MembersTab() {
   const openPayments = (uid: string) => shares.filter((x) => x.debtorUid !== x.payerUid && x.status !== 'confirmed' && (x.debtorUid === uid || x.payerUid === uid)).length
   const myOpen = openPayments(me)
   const removingOpen = removing ? openPayments(removing.id) : 0
-  const active = invites.filter((i) => isInviteActive(i)).filter((i) => isOwner || i.createdBy === me)
+  const active = invites.filter((i) => isInviteActive(i)).filter((i) => canManage || i.createdBy === me)
+
+  const showOnMap = (m: Member) => {
+    if (m.id === me) {
+      navigate(`/trips/${trip.id}/map`)
+      if (!live.sharing) toast('You’re not sharing your location. Turn it on under Live location.')
+    } else if (live.byUid.has(m.id)) navigate(`/trips/${trip.id}/map?person=${m.id}`)
+    else toast(`${m.displayName} isn’t sharing their location right now`)
+  }
+
+  const toggleAdmin = async (m: Member, admin: boolean) => {
+    try {
+      await setAdmin(trip.id, m.id, admin)
+      toast.success(admin ? `${m.displayName} is now an admin` : `${m.displayName} is no longer an admin`)
+    } catch (err) {
+      console.error(err)
+      toast.error('Couldn’t change admin. Check your connection and try again.')
+    }
+  }
 
   useEffect(() => {
     if (params.get('invite')) setParams({}, { replace: true })
@@ -58,32 +76,60 @@ export function MembersTab() {
         <ul className="divide-y divide-border/70 overflow-hidden rounded-[1.25rem] bg-card ring-1 ring-border/70">
           {members.map((m) => (
             <li key={m.id} className="flex min-h-16 items-center gap-3 px-4 py-2">
-              <UserAvatar name={m.displayName} photoURL={m.photoURL} className="size-10" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">
-                  {m.displayName}
-                  {m.id === me && <span className="text-muted-foreground"> (you)</span>}
-                </p>
-                {live.byUid.has(m.id) && (
-                  <Link to={`/trips/${trip.id}/map?person=${m.id}`} className="block truncate text-sm text-primary active:opacity-60">
-                    Sharing live location · {ageLabel(live.byUid.get(m.id)!.updatedAt, live.now)}
-                  </Link>
-                )}
-              </div>
-              {m.role === 'owner' && (
+              {/* Tap someone to see where they are, with directions to them. */}
+              <button
+                type="button"
+                onClick={() => showOnMap(m)}
+                className="flex min-h-12 min-w-0 flex-1 items-center gap-3 text-left active:opacity-60"
+                aria-label={live.byUid.has(m.id) ? `Show ${m.displayName} on the map` : m.displayName}
+              >
+                <UserAvatar name={m.displayName} photoURL={m.photoURL} className="size-10" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">
+                    {m.displayName}
+                    {m.id === me && <span className="text-muted-foreground"> (you)</span>}
+                  </span>
+                  {live.byUid.has(m.id) && (
+                    <span className="flex items-center gap-1 truncate text-sm text-primary">
+                      <MapPin className="size-3.5 shrink-0" aria-hidden /> Sharing live location · {ageLabel(live.byUid.get(m.id)!.updatedAt, live.now)}
+                    </span>
+                  )}
+                </span>
+              </button>
+              {m.id === trip.ownerId ? (
                 <Badge variant="secondary">
                   <Crown aria-hidden /> Owner
                 </Badge>
+              ) : (
+                isAdminId(m.id) && (
+                  <Badge variant="secondary">
+                    <ShieldCheck aria-hidden /> Admin
+                  </Badge>
+                )
               )}
-              {isOwner && m.id !== me && (
+              {/* The owner manages everyone; an admin can remove regular members. */}
+              {m.id !== me && (isOwner || (canManage && m.id !== trip.ownerId && !isAdminId(m.id))) && (
                 <DropdownMenu>
                   <DropdownMenuTrigger className="inline-flex size-11 items-center justify-center rounded-full hover:bg-foreground/6" aria-label={`Options for ${m.displayName}`}>
                     <MoreHorizontal className="size-5" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onSelect={() => setPromoting(m)}>
-                      <Crown /> Make owner
-                    </DropdownMenuItem>
+                    {isOwner && (
+                      <>
+                        {isAdminId(m.id) ? (
+                          <DropdownMenuItem onSelect={() => toggleAdmin(m, false)}>
+                            <ShieldOff /> Remove admin
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem onSelect={() => toggleAdmin(m, true)}>
+                            <ShieldCheck /> Make admin
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onSelect={() => setPromoting(m)}>
+                          <Crown /> Make owner
+                        </DropdownMenuItem>
+                      </>
+                    )}
                     <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setRemoving(m)}>
                       <LogOut /> Remove from trip
                     </DropdownMenuItem>
@@ -93,6 +139,9 @@ export function MembersTab() {
             </li>
           ))}
         </ul>
+        {isOwner && members.length > 1 && (
+          <p className="px-4 pt-2 text-sm text-muted-foreground">Admins can edit trip details, remove members, and change or delete anyone’s plans, costs and ideas. Only you can delete the trip or choose admins.</p>
+        )}
       </section>
 
       <section aria-labelledby="live-h">

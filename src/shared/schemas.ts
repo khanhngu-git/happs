@@ -77,10 +77,12 @@ export const tripSchema = z.object({
   baseCurrency: currencyCode,
   ownerId: z.string(),
   memberIds: z.array(z.string()),
+  /** Members the owner made admins: they can do what the owner does, except delete the trip, hand it over or choose admins. */
+  adminIds: z.array(z.string()).default([]),
   coverEmoji: z.string().nullable().default(null),
   coverColor: z.string().nullable().default(null),
   coverPhotoURL: z.string().nullable().default(null),
-  /** Read-only link for people who aren't on the trip (owner turns it on/off). */
+  /** Read-only link for people who aren't on the trip (owner or an admin turns it on/off). */
   shareToken: z.string().nullable().default(null),
   notes: z.string().default(''),
   createdAt: timestamp.optional(),
