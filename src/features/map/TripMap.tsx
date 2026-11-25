@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AdvancedMarker, Map, useMap } from '@vis.gl/react-google-maps'
-import { BedDouble, Flag, LocateFixed, Scan } from 'lucide-react'
+import { BedDouble, Flag, LocateFixed, MapPin, Scan } from 'lucide-react'
 import { toast } from 'sonner'
 import { MAP_ID } from '@/lib/maps'
 import { ITEM_TYPE_META, iconFor } from '@/features/itinerary/itemTypes'
@@ -171,13 +171,17 @@ function PanToPerson({ person }: { person: Person | null }) {
   return null
 }
 
-/** A member sharing their location: their photo, ringed, with their first name underneath. */
-function PersonPin({ person, now }: { person: Person; now: number }) {
+/** A member sharing their location: their photo, ringed, with their first name underneath. Tap for directions to them. */
+function PersonPin({ person, now, selected, dimmed, onSelect }: { person: Person; now: number; selected: boolean; dimmed: boolean; onSelect(): void }) {
   const stale = person.freshness === 'stale'
   return (
-    <AdvancedMarker position={{ lat: person.lat, lng: person.lng }} title={`${person.name} · ${ageLabel(person.updatedAt, now)}`} zIndex={2000}>
-      <div className="flex flex-col items-center transition-opacity" style={{ opacity: stale ? 0.55 : 1 }} aria-hidden>
-        <UserAvatar name={person.name} photoURL={person.photoURL} className={`size-10 border-[3px] shadow-[0_2px_8px_rgb(0_0_0/0.35)] ${stale ? 'border-zinc-300' : 'border-sky-500'}`} />
+    <AdvancedMarker position={{ lat: person.lat, lng: person.lng }} title={`${person.name} · ${ageLabel(person.updatedAt, now)}`} zIndex={selected ? 2002 : 2000} onClick={onSelect}>
+      <div className="flex flex-col items-center transition-all" style={{ opacity: dimmed ? 0.45 : stale ? 0.55 : 1 }} aria-hidden>
+        <UserAvatar
+          name={person.name}
+          photoURL={person.photoURL}
+          className={`border-[3px] shadow-[0_2px_8px_rgb(0_0_0/0.35)] transition-all ${selected ? 'size-13' : 'size-10'} ${stale ? 'border-zinc-300' : 'border-sky-500'}`}
+        />
         <span className="mt-0.5 max-w-24 truncate rounded-full bg-white px-1.5 text-[0.6875rem] font-semibold text-zinc-900 shadow-[0_1px_3px_rgb(0_0_0/0.3)]">
           {person.name.split(' ')[0]}
           {stale && ` · ${ageLabel(person.updatedAt, now)}`}
@@ -185,6 +189,119 @@ function PersonPin({ person, now }: { person: Person; now: number }) {
       </div>
     </AdvancedMarker>
   )
+}
+
+const LONG_PRESS_MS = 500
+/** Finger movement that still counts as holding still (px). */
+const LONG_PRESS_SLOP = 10
+
+/**
+ * Press and hold anywhere on the map to drop a pin (right-click on a computer).
+ * Google Maps has no long-press event, so this watches the pointer on the map's
+ * container and turns the screen point into a position through an overlay's
+ * projection. Panning, pinching or lifting early cancels it.
+ */
+function LongPress({ onPress }: { onPress(p: google.maps.LatLngLiteral): void }) {
+  const map = useMap()
+  const cb = useRef(onPress)
+  useEffect(() => {
+    cb.current = onPress
+  })
+  useEffect(() => {
+    if (!map) return
+    const overlay = new google.maps.OverlayView()
+    overlay.onAdd = () => {}
+    overlay.draw = () => {}
+    overlay.onRemove = () => {}
+    overlay.setMap(map)
+    const div = map.getDiv()
+    const down = new Set<number>()
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let start: { x: number; y: number } | null = null
+    /** The tap that ends a long press shouldn't also count as a tap on the map. */
+    let swallowClickUntil = 0
+    const cancel = () => {
+      if (timer) clearTimeout(timer)
+      timer = null
+      start = null
+    }
+    const drop = (clientX: number, clientY: number) => {
+      const proj = overlay.getProjection()
+      if (!proj) return
+      const r = div.getBoundingClientRect()
+      const ll = proj.fromContainerPixelToLatLng(new google.maps.Point(clientX - r.left, clientY - r.top))
+      if (!ll) return
+      swallowClickUntil = Date.now() + 600
+      navigator.vibrate?.(15)
+      cb.current({ lat: ll.lat(), lng: ll.lng() })
+    }
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0) return
+      down.add(e.pointerId)
+      // Two fingers: a pinch, not a press.
+      if (down.size > 1) return cancel()
+      // Only on the map itself, not on a pin or a control.
+      if ((e.target as Element).closest('gmp-advanced-marker, [role="button"], button')) return
+      start = { x: e.clientX, y: e.clientY }
+      const { clientX, clientY } = e
+      timer = setTimeout(() => {
+        timer = null
+        start = null
+        drop(clientX, clientY)
+      }, LONG_PRESS_MS)
+    }
+    const onMove = (e: PointerEvent) => {
+      if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > LONG_PRESS_SLOP) cancel()
+    }
+    const onUp = (e: PointerEvent) => {
+      down.delete(e.pointerId)
+      cancel()
+    }
+    const onClick = (e: MouseEvent) => {
+      if (Date.now() < swallowClickUntil) {
+        e.stopPropagation()
+        e.preventDefault()
+      }
+    }
+    const onContext = (e: MouseEvent) => {
+      // Right-click on a computer; also stops the phone's own menu after a hold.
+      e.preventDefault()
+      if (e.button === 2 || (e as PointerEvent).pointerType === 'mouse') drop(e.clientX, e.clientY)
+    }
+    const opts = { capture: true }
+    div.addEventListener('pointerdown', onDown, opts)
+    div.addEventListener('pointermove', onMove, opts)
+    div.addEventListener('pointerup', onUp, opts)
+    div.addEventListener('pointercancel', onUp, opts)
+    div.addEventListener('click', onClick, opts)
+    div.addEventListener('contextmenu', onContext, opts)
+    const dragging = map.addListener('dragstart', cancel)
+    const zooming = map.addListener('zoom_changed', cancel)
+    return () => {
+      cancel()
+      div.removeEventListener('pointerdown', onDown, opts)
+      div.removeEventListener('pointermove', onMove, opts)
+      div.removeEventListener('pointerup', onUp, opts)
+      div.removeEventListener('pointercancel', onUp, opts)
+      div.removeEventListener('click', onClick, opts)
+      div.removeEventListener('contextmenu', onContext, opts)
+      dragging.remove()
+      zooming.remove()
+      overlay.setMap(null)
+    }
+  }, [map])
+  return null
+}
+
+/** Keep a dropped pin in view (it may be under the card). */
+function PanToPin({ pin }: { pin: google.maps.LatLngLiteral | null }) {
+  const map = useMap()
+  const key = pin ? `${pin.lat},${pin.lng}` : null
+  useEffect(() => {
+    if (map && pin) map.panTo(pin)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, key])
+  return null
 }
 
 function LocateMe({ onLocated, live }: { onLocated(p: google.maps.LatLngLiteral): void; live: google.maps.LatLngLiteral | null }) {
@@ -218,7 +335,30 @@ function LocateMe({ onLocated, live }: { onLocated(p: google.maps.LatLngLiteral)
   )
 }
 
-export function TripMap({ stops, selectedId, onSelect, personId }: { stops: MapStop[]; selectedId: string | null; onSelect(id: string | null): void; personId?: string | null }) {
+export interface TripMapProps {
+  stops: MapStop[]
+  selectedId: string | null
+  onSelect(id: string | null): void
+  /** The member whose pin is selected. */
+  personId?: string | null
+  onSelectPerson(uid: string): void
+  /** A pin dropped with a long press. */
+  pin?: google.maps.LatLngLiteral | null
+  onDropPin(p: google.maps.LatLngLiteral): void
+  /** A tap on empty map: close whatever is open. */
+  onClear(): void
+}
+
+export function TripMap({ stops, selectedId, onSelect, personId, onSelectPerson, pin = null, onDropPin, onClear }: TripMapProps) {
+  // Lifting the finger after a long press can arrive as a map tap; don't let it close the new pin.
+  const droppedAt = useRef(0)
+  const drop = (p: google.maps.LatLngLiteral) => {
+    droppedAt.current = Date.now()
+    onDropPin(p)
+  }
+  const clear = () => {
+    if (Date.now() - droppedAt.current > 600) onClear()
+  }
   const [located, setLocated] = useState<google.maps.LatLngLiteral | null>(null)
   const live = useLiveLocation()
   const liveMe = useMemo(() => (live.myFix ? { lat: live.myFix.lat, lng: live.myFix.lng } : null), [live.myFix])
@@ -228,7 +368,7 @@ export function TripMap({ stops, selectedId, onSelect, personId }: { stops: MapS
   const center = useMemo(() => (first ? { lat: first.lat, lng: first.lng } : { lat: 0, lng: 0 }), [first])
   return (
     <div className="relative size-full">
-      <Map mapId={MAP_ID} defaultCenter={center} defaultZoom={stops.length ? 12 : 2} disableDefaultUI gestureHandling="greedy" clickableIcons={false} onClick={() => onSelect(null)} colorScheme="FOLLOW_SYSTEM">
+      <Map mapId={MAP_ID} defaultCenter={center} defaultZoom={stops.length ? 12 : 2} disableDefaultUI gestureHandling="greedy" clickableIcons={false} onClick={clear} colorScheme="FOLLOW_SYSTEM">
         {stops.map((s) => {
           const meta = ITEM_TYPE_META[s.item.type]
           const Icon = iconFor(s.item)
@@ -297,14 +437,21 @@ export function TripMap({ stops, selectedId, onSelect, personId }: { stops: MapS
         )}
         <Journeys stops={stops} selectedId={selectedId} />
         {live.people.map((p) => (
-          <PersonPin key={p.uid} person={p} now={live.now} />
+          <PersonPin key={p.uid} person={p} now={live.now} selected={p.uid === personId} dimmed={!!personId && p.uid !== personId} onSelect={() => onSelectPerson(p.uid)} />
         ))}
+        {pin && (
+          <AdvancedMarker position={pin} title="Dropped pin" zIndex={2003} anchorPoint={['50%', '100%']}>
+            <MapPin className="size-10 fill-red-500 stroke-white drop-shadow-[0_2px_4px_rgb(0_0_0/0.4)]" strokeWidth={1.5} aria-hidden />
+          </AdvancedMarker>
+        )}
+        <LongPress onPress={drop} />
+        <PanToPin pin={pin} />
         {me && (
           <AdvancedMarker position={me} title={live.sharing ? 'You (sharing live)' : 'You are here'} zIndex={2001}>
             <span className="block size-4 rounded-full border-2 border-white bg-sky-500 shadow-[0_0_0_6px_rgb(14_165_233/0.25)]" />
           </AdvancedMarker>
         )}
-        <FitBounds stops={stops} skip={!!selectedId || !!focus} />
+        <FitBounds stops={stops} skip={!!selectedId || !!focus || !!pin} />
         <PanToPerson person={selectedId ? null : focus} />
         <DayLine stops={stops} />
         <PanToSelected stop={stops.find((s) => s.item.id === selectedId) ?? null} />

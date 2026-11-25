@@ -17,6 +17,7 @@ import { mapStops } from './mapData'
 import { useLiveLocation } from '@/features/location/LiveLocationProvider'
 import { StopCard } from './StopCard'
 import { StopStrip } from './StopStrip'
+import { DroppedPinCard, PersonCard } from './PlaceCards'
 
 const TripMap = lazy(() => import('./TripMap').then((m) => ({ default: m.TripMap })))
 
@@ -39,7 +40,7 @@ export function MapTab() {
   const { trip } = useTrip()
   const [params, setParams] = useSearchParams()
   const { data: items, loading } = useItems(trip.id)
-  const { dialogs, editItem } = useItineraryDialogs(items)
+  const { dialogs, editItem, addPrefilled } = useItineraryDialogs(items)
   const days = useMemo(() => tripDays(trip.startDate, trip.endDate), [trip.startDate, trip.endDate])
   // During the trip the map opens on today; "All days" is an explicit choice.
   const today = todayInZone(trip.timeZone)
@@ -60,16 +61,29 @@ export function MapTab() {
   const live = useLiveLocation()
   const selected = stops.find((s) => s.item.id === selectedId) ?? null
 
-  const set = (k: string, v: string | null) =>
+  const person = live.people.find((p) => p.uid === personId) ?? null
+  // A dropped pin lives in the URL as "lat,lng", like the selected stop.
+  const pin = useMemo(() => {
+    const [lat, lng] = (params.get('pin') ?? '').split(',').map(Number)
+    return lat !== undefined && lng !== undefined && Number.isFinite(lat) && Number.isFinite(lng) && params.get('pin') ? { lat, lng } : null
+  }, [params])
+
+  const setMany = (changes: Record<string, string | null>) =>
     setParams(
       (p) => {
         const n = new URLSearchParams(p)
-        if (v) n.set(k, v)
-        else n.delete(k)
+        for (const [k, v] of Object.entries(changes)) {
+          if (v) n.set(k, v)
+          else n.delete(k)
+        }
         return n
       },
       { replace: true },
     )
+  const set = (k: string, v: string | null) => setMany({ [k]: v })
+  /** Only one thing is open at a time: a stop, a person, or a dropped pin. */
+  const open = (what: { item?: string; person?: string; pin?: string }) => setMany({ item: what.item ?? null, person: what.person ?? null, pin: what.pin ?? null })
+  const planDay = day ?? (days.includes(today) ? today : trip.startDate)
 
   const filters = (
     <div className="glass pointer-events-auto space-y-1 rounded-[1.5rem] p-1.5">
@@ -103,7 +117,7 @@ export function MapTab() {
     <ol className="divide-y divide-border/70 overflow-hidden rounded-[1.25rem] bg-card ring-1 ring-border/70">
       {stops.map((s) => (
         <li key={s.item.id}>
-          <button type="button" onClick={() => set('item', s.item.id)} className={cn('flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left', s.item.id === selectedId && 'bg-primary/8')}>
+          <button type="button" onClick={() => open({ item: s.item.id })} className={cn('flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left', s.item.id === selectedId && 'bg-primary/8')}>
             <span className="w-6 text-center text-sm font-bold text-muted-foreground">{s.number ?? ''}</span>
             <ItemTypeIcon type={s.item.type} title={s.item.title} className="size-9" />
             <span className="min-w-0 flex-1">
@@ -158,7 +172,16 @@ export function MapTab() {
       <div className="relative h-full">
         {hasMaps ? (
           <Suspense fallback={<Skeleton className="size-full rounded-none" />}>
-            <TripMap stops={stops} selectedId={selectedId} onSelect={(id) => set('item', id)} personId={personId} />
+            <TripMap
+              stops={stops}
+              selectedId={selectedId}
+              onSelect={(id) => open({ item: id ?? undefined })}
+              personId={personId}
+              onSelectPerson={(uid) => open({ person: uid })}
+              pin={pin}
+              onDropPin={(p) => open({ pin: `${p.lat.toFixed(6)},${p.lng.toFixed(6)}` })}
+              onClear={() => open({})}
+            />
           </Suspense>
         ) : (
           <div className="h-full overflow-y-auto bg-grouped px-3 pt-36 pb-32">
@@ -171,16 +194,32 @@ export function MapTab() {
           <div className="pointer-events-none absolute inset-x-3 bottom-[calc(6rem+env(safe-area-inset-bottom))] md:bottom-4 md:left-auto md:w-96">
             <StopCard stop={selected} onClose={() => set('item', null)} />
           </div>
+        ) : person ? (
+          <div className="pointer-events-none absolute inset-x-3 bottom-[calc(6rem+env(safe-area-inset-bottom))] md:bottom-4 md:left-auto md:w-96">
+            <PersonCard person={person} now={live.now} onClose={() => open({})} />
+          </div>
+        ) : pin ? (
+          <div className="pointer-events-none absolute inset-x-3 bottom-[calc(6rem+env(safe-area-inset-bottom))] md:bottom-4 md:left-auto md:w-96">
+            <DroppedPinCard
+              pin={pin}
+              onClose={() => open({})}
+              onAdd={(location) => {
+                open({})
+                addPrefilled({ type: 'activity', title: location.name === 'Dropped pin' ? '' : location.name, date: planDay, startTime: null, location, photoURL: null, notes: '', cost: null })
+              }}
+            />
+          </div>
         ) : (
           hasMaps &&
           day &&
           stops.some((s) => s.item.type !== 'stay') && (
             <div className="pointer-events-none absolute inset-x-0 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] md:hidden">
-              <StopStrip stops={stops} onSelect={(id) => set('item', id)} />
+              <StopStrip stops={stops} onSelect={(id) => open({ item: id })} />
             </div>
           )
         )}
       </div>
+      {dialogs}
     </div>
   )
 }
